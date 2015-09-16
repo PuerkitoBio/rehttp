@@ -11,14 +11,15 @@
 //       ),
 //     }
 //
-// The retry strategy is provided by the Transport.Retry field, a function
-// that returns whether or not the request should be retried, and if so, what
-// delay to apply before retrying.
+// The retry strategy is provided by the Transport.Retry field, which holds
+// a function that returns whether or not the request should be retried,
+// and if so, what delay to apply before retrying.
 //
 // For convenience, ToRetryFn combines two functions - a ShouldRetryFn
 // that returns whether or not the request should be retried, and a DelayFn
 // that returns the delay to apply - into a RetryFn that can be used as
-// value for Transport.Retry.
+// value for Transport.Retry. As seen in the example above, NewTransport
+// also accepts the retry strategy as a pair of ShouldRetryFn and DelayFn.
 //
 // The package offers common delay strategies as ready-made functions that
 // return a DelayFn:
@@ -30,8 +31,9 @@
 // It also provides common retry predicates that return a ShouldRetryFn:
 //     - RetryTemporaryErr(maxRetries int) ShouldRetryFn
 //     - RetryStatus500(maxRetries int) ShouldRetryFn
+//     - RetryHTTPMethods(maxRetries int, methods ...string) ShouldRetryFn
 //
-// Those can be combined with RetryAny as needed.
+// Those can be combined with RetryAny or RetryAll as needed.
 //
 // The Transport will buffer the request's body in order to be able to
 // retry the request, as a request attempt will consume and close the
@@ -48,6 +50,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -119,6 +122,19 @@ func RetryAny(retryFns ...ShouldRetryFn) ShouldRetryFn {
 	}
 }
 
+// RetryAll returns a ShouldRetryFn that allows a retry if all retryFns
+// return true.
+func RetryAll(retryFns ...ShouldRetryFn) ShouldRetryFn {
+	return func(req *http.Request, res *http.Response, attempt int, err error) bool {
+		for _, fn := range retryFns {
+			if !fn(req, res, attempt, err) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
 // RetryTemporaryErr returns a ShouldRetryFn that retries up to maxRetries
 // times for a temporary error. A temporary error is one that implements
 // the Temporary() bool method. Most errors from the net package implement
@@ -143,6 +159,27 @@ func RetryStatus500(maxRetries int) ShouldRetryFn {
 			return false
 		}
 		return res != nil && res.StatusCode >= 500 && res.StatusCode < 600 // who knows
+	}
+}
+
+// RetryHTTPMethods returns a ShouldRetryFn that retries up to maxRetries
+// times if the request's HTTP method is one of the provided methods.
+func RetryHTTPMethods(maxRetries int, methods ...string) ShouldRetryFn {
+	for i, m := range methods {
+		methods[i] = strings.ToUpper(m)
+	}
+
+	return func(req *http.Request, res *http.Response, attempt int, err error) bool {
+		if attempt >= maxRetries {
+			return false
+		}
+		curMeth := strings.ToUpper(req.Method)
+		for _, m := range methods {
+			if curMeth == m {
+				return true
+			}
+		}
+		return false
 	}
 }
 
@@ -241,13 +278,17 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			// Per Go's doc: "RoundTrip should not modify the request,
 			// except for consuming and closing the Body", so the only thing
 			// to reset on the request is the body, if any.
-			if _, err := br.Seek(0, 0); err != nil {
+			if _, serr := br.Seek(0, 0); serr != nil {
 				// failed to retry, return the results
 				return res, err
 			}
 			req.Body = ioutil.NopCloser(br)
 		}
-		time.Sleep(delay)
-		attempt++
+		select {
+		case <-time.After(delay):
+			attempt++
+		case <-req.Cancel:
+			return res, err
+		}
 	}
 }
