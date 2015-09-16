@@ -26,7 +26,7 @@
 // return a DelayFn:
 //     - ConstDelay(delay time.Duration) DelayFn
 //     - NoDelay() DelayFn
-//     - ExponentialDelay(initialDelay time.Duration) DelayFn
+//     - ExponentialDelay(initialDelay, base time.Duration) DelayFn
 //     - LinearDelay(initialDelay time.Duration) DelayFn
 //
 // It also provides common retry predicates that return a ShouldRetryFn:
@@ -198,12 +198,15 @@ func NoDelay() DelayFn {
 	}
 }
 
-// ExponentialDelay returns a DelayFn that returns an exponential delay based
-// on initialDelay at the power of attempt + 1 (so the first delay is
-// initialDelay, then initialDelay ** 2, etc.).
-func ExponentialDelay(initialDelay time.Duration) DelayFn {
+// ExponentialDelay returns a DelayFn that returns an exponential delay from
+// the initialDelay (in the provided base, e.g. an initialDelay of 2s in base
+// time.Second will give delays of 2s, 4s, 8s...). There is no special case
+// handling, so passing 1s in a time.Second base will yield 1s every time.
+func ExponentialDelay(initialDelay, base time.Duration) DelayFn {
+	inBase := float64(initialDelay) / float64(base)
 	return func(req *http.Request, res *http.Response, attempt int, err error) time.Duration {
-		return time.Duration(math.Pow(float64(initialDelay), float64(attempt+1)))
+		newVal := math.Pow(inBase, float64(attempt+1))
+		return time.Duration(newVal * float64(base))
 	}
 }
 
