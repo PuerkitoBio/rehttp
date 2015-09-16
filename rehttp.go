@@ -9,6 +9,7 @@
 //         rehttp.RetryTemporaryErr(3),    // max 3 retries
 //         rehttp.ConstDelay(time.Second), // wait 1s between retries
 //       ),
+//       Timeout: 30 * time.Second, // timeout applies to all retries as a whole
 //     }
 //
 // The retry strategy is provided by the Transport.Retry field, which holds
@@ -238,6 +239,7 @@ type Transport struct {
 
 // Per Go's doc: "CancelRequest should only be called after RoundTrip
 // has returned."
+//
 // So it should not have an impact on this Transport (it doesn't return before
 // the retries are done).
 
