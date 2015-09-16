@@ -292,6 +292,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		select {
 		case <-time.After(delay):
 			attempt++
+			// close the disposed response's body, if any
+			if res != nil {
+				res.Body.Close()
+			}
 		case <-req.Cancel:
 			return res, err
 		}

@@ -1,6 +1,7 @@
 package rehttp
 
 import (
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -85,5 +86,52 @@ func TestRetryHTTPMethods(t *testing.T) {
 }
 
 func TestRetryStatus500(t *testing.T) {
+	cases := []struct {
+		retries int
+		res     *http.Response
+		att     int
+		want    bool
+	}{
+		{retries: 1, res: nil, att: 0, want: false},
+		{retries: 1, res: nil, att: 1, want: false},
+		{retries: 1, res: &http.Response{StatusCode: 200}, att: 0, want: false},
+		{retries: 1, res: &http.Response{StatusCode: 400}, att: 0, want: false},
+		{retries: 1, res: &http.Response{StatusCode: 500}, att: 0, want: true},
+		{retries: 1, res: &http.Response{StatusCode: 500}, att: 1, want: false},
+		{retries: 2, res: &http.Response{StatusCode: 500}, att: 0, want: true},
+		{retries: 2, res: &http.Response{StatusCode: 500}, att: 1, want: true},
+		{retries: 2, res: &http.Response{StatusCode: 500}, att: 2, want: false},
+	}
 
+	for i, tc := range cases {
+		fn := RetryStatus500(tc.retries)
+		got := fn(nil, tc.res, tc.att, nil)
+		assert.Equal(t, tc.want, got, "%d", i)
+	}
+}
+
+type tempErr struct{}
+
+func (t tempErr) Error() string   { return "temp error" }
+func (t tempErr) Temporary() bool { return true }
+
+func TestRetryTemporaryErr(t *testing.T) {
+	cases := []struct {
+		retries int
+		err     error
+		att     int
+		want    bool
+	}{
+		{retries: 1, err: nil, att: 0, want: false},
+		{retries: 1, err: nil, att: 1, want: false},
+		{retries: 1, err: io.EOF, att: 0, want: false},
+		{retries: 1, err: tempErr{}, att: 0, want: true},
+		{retries: 1, err: tempErr{}, att: 1, want: false},
+	}
+
+	for i, tc := range cases {
+		fn := RetryTemporaryErr(tc.retries)
+		got := fn(nil, nil, tc.att, tc.err)
+		assert.Equal(t, tc.want, got, "%d", i)
+	}
 }
