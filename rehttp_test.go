@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,12 +15,14 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/aybabtme/iocontrol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // TODO: test with context.Context that cancels the request,
-// test with transport-level timeouts.
+// test with transport-level ResponseHeaderTimeout, timeout on a retry (first response is
+// fast, second is slow).
 
 type mockRoundTripper struct {
 	t *testing.T
@@ -72,26 +75,81 @@ func (m *mockRoundTripper) Bodies() []string {
 	return m.bodies
 }
 
+func TestClientTimeoutSlowBody(t *testing.T) {
+	// server that flushes the headers ASAP, but sends the body slowly
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		tw := iocontrol.ThrottledWriter(w, 2, time.Second)
+		fmt.Fprint(tw, r.URL.Path)
+	}))
+	defer srv.Close()
+
+	runWithClient := func(c *http.Client) {
+		res, err := c.Get(srv.URL + "/test")
+
+		// should receive a response
+		require.Nil(t, err)
+		require.NotNil(t, res)
+
+		// should fail with timeout while reading body
+		_, err = io.Copy(ioutil.Discard, res.Body)
+		res.Body.Close()
+
+		if assert.NotNil(t, err) {
+			nerr, ok := err.(net.Error)
+			require.True(t, ok)
+			assert.True(t, nerr.Timeout())
+			t.Log(err)
+		}
+	}
+
+	// test with retry transport
+	c := &http.Client{
+		Transport: NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second)),
+		Timeout:   time.Second,
+	}
+	runWithClient(c)
+
+	// test with default transport, make sure it behaves the same way
+	c = &http.Client{Timeout: time.Second}
+	runWithClient(c)
+}
+
 func TestClientTimeout(t *testing.T) {
+	// server that doesn't reply before the timeout
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second)
 		fmt.Fprint(w, r.URL.Path)
 	}))
 	defer srv.Close()
 
+	assertTimeoutErr := func(res *http.Response, err error) {
+		require.Nil(t, res)
+		if assert.NotNil(t, err) {
+			uerr, ok := err.(*url.Error)
+			require.True(t, ok)
+			nerr, ok := uerr.Err.(net.Error)
+			require.True(t, ok)
+			assert.True(t, nerr.Timeout())
+			t.Log(nerr)
+		}
+	}
+
+	// test with retry transport
 	c := &http.Client{
 		Transport: NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second)),
 		Timeout:   time.Second,
 	}
 	res, err := c.Get(srv.URL + "/test")
-	require.Nil(t, res)
-	if assert.NotNil(t, err) {
-		uerr, ok := err.(*url.Error)
-		require.True(t, ok)
-		nerr, ok := uerr.Err.(net.Error)
-		require.True(t, ok)
-		assert.True(t, nerr.Timeout())
-	}
+	assertTimeoutErr(res, err)
+
+	// test with default transport, make sure it returns the same error
+	c = &http.Client{Timeout: time.Second}
+	res, err = c.Get(srv.URL + "/test")
+	assertTimeoutErr(res, err)
 }
 
 func TestClientRetry(t *testing.T) {
