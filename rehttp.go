@@ -93,8 +93,8 @@ func NewTransport(rt CancelRoundTripper, shouldRetry ShouldRetryFn, delay DelayF
 		rt = http.DefaultTransport.(CancelRoundTripper)
 	}
 	return &Transport{
-		rt:    rt,
-		Retry: ToRetryFn(shouldRetry, delay),
+		CancelRoundTripper: rt,
+		Retry:              ToRetryFn(shouldRetry, delay),
 	}
 }
 
@@ -111,7 +111,7 @@ func ToRetryFn(shouldRetry ShouldRetryFn, delay DelayFn) RetryFn {
 }
 
 // RetryAny returns a ShouldRetryFn that allows a retry as long as one of
-// the retryFns returns true.
+// the retryFns returns true. If retryFns is empty, it always returns false.
 func RetryAny(retryFns ...ShouldRetryFn) ShouldRetryFn {
 	return func(req *http.Request, res *http.Response, attempt int, err error) bool {
 		for _, fn := range retryFns {
@@ -124,7 +124,7 @@ func RetryAny(retryFns ...ShouldRetryFn) ShouldRetryFn {
 }
 
 // RetryAll returns a ShouldRetryFn that allows a retry if all retryFns
-// return true.
+// return true. If retryFns is empty, it always returns true.
 func RetryAll(retryFns ...ShouldRetryFn) ShouldRetryFn {
 	return func(req *http.Request, res *http.Response, attempt int, err error) bool {
 		for _, fn := range retryFns {
@@ -221,7 +221,7 @@ func LinearDelay(initialDelay time.Duration) DelayFn {
 // Transport wraps a CancelRoundTripper such as *http.Transport and adds
 // retry logic.
 type Transport struct {
-	rt CancelRoundTripper
+	CancelRoundTripper
 
 	// PreventRetryWithBody prevents retrying if the request has a body. Since
 	// the body is consumed on a request attempt, in order to retry a request
@@ -269,7 +269,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	for {
-		res, err := t.rt.RoundTrip(req)
+		res, err := t.CancelRoundTripper.RoundTrip(req)
 		if preventRetry {
 			return res, err
 		}
@@ -297,6 +297,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 				res.Body.Close()
 			}
 		case <-req.Cancel:
+			// request canceled, don't retry
 			return res, err
 		}
 	}
