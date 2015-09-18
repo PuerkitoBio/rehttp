@@ -23,8 +23,6 @@ import (
 	"golang.org/x/net/context/ctxhttp"
 )
 
-// TODO : cleanup/refactor tests
-
 type mockRoundTripper struct {
 	t *testing.T
 
@@ -74,6 +72,26 @@ func (m *mockRoundTripper) Bodies() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.bodies
+}
+
+func assertNetTimeoutErr(t *testing.T, err error) {
+	if assert.NotNil(t, err) {
+		nerr, ok := err.(net.Error)
+		require.True(t, ok)
+		assert.True(t, nerr.Timeout())
+		t.Logf("%#v", err)
+	}
+}
+
+func assertURLTimeoutErr(t *testing.T, err error) {
+	if assert.NotNil(t, err) {
+		uerr, ok := err.(*url.Error)
+		require.True(t, ok)
+		nerr, ok := uerr.Err.(net.Error)
+		require.True(t, ok)
+		assert.True(t, nerr.Timeout())
+		t.Logf("%#v", nerr)
+	}
 }
 
 func TestContextCancelOnRetry(t *testing.T) {
@@ -189,26 +207,6 @@ func TestClientTimeoutSlowBody(t *testing.T) {
 	// test with default transport, make sure it behaves the same way
 	c = &http.Client{Timeout: time.Second}
 	runWithClient(c)
-}
-
-func assertNetTimeoutErr(t *testing.T, err error) {
-	if assert.NotNil(t, err) {
-		nerr, ok := err.(net.Error)
-		require.True(t, ok)
-		assert.True(t, nerr.Timeout())
-		t.Logf("%#v", err)
-	}
-}
-
-func assertURLTimeoutErr(t *testing.T, err error) {
-	if assert.NotNil(t, err) {
-		uerr, ok := err.(*url.Error)
-		require.True(t, ok)
-		nerr, ok := uerr.Err.(net.Error)
-		require.True(t, ok)
-		assert.True(t, nerr.Timeout())
-		t.Logf("%#v", nerr)
-	}
 }
 
 func TestClientTimeoutOnRetry(t *testing.T) {
