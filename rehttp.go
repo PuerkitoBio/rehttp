@@ -51,6 +51,7 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -247,6 +248,9 @@ type Transport struct {
 	// If it returns false, no retry is attempted, otherwise a retry is
 	// attempted after the specified duration.
 	retry retryFn
+
+	mu    sync.Mutex
+	reqCh map[*http.Request]chan struct{}
 }
 
 // Per Go's doc: "CancelRequest should only be called after RoundTrip
@@ -261,6 +265,20 @@ type Transport struct {
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var attempt int
 	preventRetry := req.Body != nil && t.PreventRetryWithBody
+
+	ch := make(chan struct{})
+	t.mu.Lock()
+	if t.reqCh == nil {
+		t.reqCh = make(map[*http.Request]chan struct{})
+	}
+	t.reqCh[req] = ch
+	t.mu.Unlock()
+
+	defer func() {
+		t.mu.Lock()
+		delete(t.reqCh, req)
+		t.mu.Unlock()
+	}()
 
 	// buffer the body if needed
 	var br *bytes.Reader
@@ -303,16 +321,36 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			}
 			req.Body = ioutil.NopCloser(br)
 		}
+		// close the disposed response's body, if any
+		if res != nil {
+			res.Body.Close()
+		}
+
 		select {
 		case <-time.After(delay):
 			attempt++
-			// close the disposed response's body, if any
-			if res != nil {
-				res.Body.Close()
-			}
 		case <-req.Cancel:
-			// request canceled, don't retry
-			return res, err
+			// request canceled by caller, don't retry
+			return nil, io.EOF // TODO : return timeout error
+		case <-ch:
+			// request canceled by call to CancelRequest, don't retry
+			return nil, io.EOF // TODO : return timeout error
 		}
 	}
+}
+
+func (t *Transport) CancelRequest(req *http.Request) {
+	var ch chan struct{}
+	t.mu.Lock()
+	if t.reqCh != nil {
+		ch = t.reqCh[req]
+		delete(t.reqCh, req)
+	}
+	t.mu.Unlock()
+
+	if ch != nil {
+		close(ch)
+	}
+
+	t.CancelRoundTripper.CancelRequest(req)
 }
