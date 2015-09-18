@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/iotest"
 	"time"
@@ -21,8 +22,7 @@ import (
 )
 
 // TODO: test with context.Context that cancels the request,
-// test with transport-level ResponseHeaderTimeout, timeout on a retry (first response is
-// fast, second is slow).
+// test with transport-level ResponseHeaderTimeout.
 
 type mockRoundTripper struct {
 	t *testing.T
@@ -137,10 +137,10 @@ func assertURLTimeoutErr(t *testing.T, err error) {
 
 func TestClientTimeoutOnRetry(t *testing.T) {
 	// server returns 500 on first call, sleeps 2s before reply on other calls
-	callCnt := 0
+	callCnt := int32(0)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCnt++
-		switch callCnt {
+		cnt := atomic.AddInt32(&callCnt, 1)
+		switch cnt {
 		case 1:
 			w.WriteHeader(500)
 		default:
@@ -160,9 +160,9 @@ func TestClientTimeoutOnRetry(t *testing.T) {
 	res, err := c.Get(srv.URL + "/test")
 	require.Nil(t, res)
 	assertURLTimeoutErr(t, err)
-	assert.Equal(t, 2, callCnt)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&callCnt))
 
-	callCnt = 0
+	atomic.StoreInt32(&callCnt, 0)
 
 	// timeout while waiting for retry delay
 	tr, err = NewTransport(nil, RetryStatus500(1), ConstDelay(2*time.Second))
@@ -174,14 +174,17 @@ func TestClientTimeoutOnRetry(t *testing.T) {
 	res, err = c.Get(srv.URL + "/test")
 	require.Nil(t, res)
 	assertURLTimeoutErr(t, err)
-	assert.Equal(t, 1, callCnt)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&callCnt))
 }
 
 func TestClientTimeout(t *testing.T) {
 	// server that doesn't reply before the timeout
+	wg := sync.WaitGroup{}
+	wg.Add(1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second)
 		fmt.Fprint(w, r.URL.Path)
+		wg.Done()
 	}))
 	defer srv.Close()
 
@@ -201,6 +204,8 @@ func TestClientTimeout(t *testing.T) {
 	res, err = c.Get(srv.URL + "/test")
 	require.Nil(t, res)
 	assertURLTimeoutErr(t, err)
+
+	wg.Wait()
 }
 
 func TestClientRetry(t *testing.T) {
