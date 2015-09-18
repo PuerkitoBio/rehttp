@@ -19,10 +19,11 @@ import (
 	"github.com/aybabtme/iocontrol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/context"
+	"golang.org/x/net/context/ctxhttp"
 )
 
-// TODO: test with context.Context that cancels the request,
-// test with transport-level ResponseHeaderTimeout.
+// TODO : cleanup/refactor tests
 
 type mockRoundTripper struct {
 	t *testing.T
@@ -73,6 +74,81 @@ func (m *mockRoundTripper) Bodies() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.bodies
+}
+
+func TestContextCancelOnRetry(t *testing.T) {
+	callCnt := int32(0)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cnt := atomic.AddInt32(&callCnt, 1)
+		switch cnt {
+		case 1:
+			w.WriteHeader(500)
+		default:
+			time.Sleep(2 * time.Second)
+			fmt.Fprint(w, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	// cancel while waiting on retry response
+	tr, err := NewTransport(nil, RetryStatus500(1), NoDelay())
+	require.Nil(t, err)
+	c := &http.Client{
+		Transport: tr,
+	}
+
+	ctx, cancelFn := context.WithDeadline(context.Background(), time.Now().Add(time.Second))
+	defer cancelFn()
+
+	res, err := ctxhttp.Get(ctx, c, srv.URL+"/test")
+	require.Nil(t, res)
+
+	assert.Equal(t, context.DeadlineExceeded, err)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&callCnt))
+
+	// cancel while waiting on delay
+	atomic.StoreInt32(&callCnt, 0)
+	tr, err = NewTransport(nil, RetryStatus500(1), ConstDelay(2*time.Second))
+	require.Nil(t, err)
+	c = &http.Client{
+		Transport: tr,
+	}
+
+	ctx, cancelFn = context.WithDeadline(context.Background(), time.Now().Add(time.Second))
+	defer cancelFn()
+
+	res, err = ctxhttp.Get(ctx, c, srv.URL+"/test")
+	require.Nil(t, res)
+
+	assert.Equal(t, context.DeadlineExceeded, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&callCnt))
+}
+
+func TestContextCancel(t *testing.T) {
+	// server that doesn't reply before the timeout
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		fmt.Fprint(w, r.URL.Path)
+		wg.Done()
+	}))
+	defer srv.Close()
+
+	tr, err := NewTransport(nil, RetryStatus500(1), NoDelay())
+	require.Nil(t, err)
+	c := &http.Client{
+		Transport: tr,
+	}
+
+	ctx, cancelFn := context.WithDeadline(context.Background(), time.Now().Add(time.Second))
+	defer cancelFn()
+
+	res, err := ctxhttp.Get(ctx, c, srv.URL+"/test")
+	require.Nil(t, res)
+
+	assert.Equal(t, context.DeadlineExceeded, err)
+	wg.Wait()
 }
 
 func TestClientTimeoutSlowBody(t *testing.T) {
@@ -223,7 +299,7 @@ func TestTransportTimeout(t *testing.T) {
 	httpTr := &http.Transport{
 		ResponseHeaderTimeout: time.Second,
 	}
-	tr, err := NewTransport(httpTr, RetryAny(), NoDelay())
+	tr, err := NewTransport(httpTr, RetryTemporaryErr(1), ConstDelay(time.Second))
 	require.Nil(t, err)
 	c := &http.Client{Transport: tr}
 	res, err := c.Get(srv.URL + "/test")
