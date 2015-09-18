@@ -654,3 +654,19 @@ func TestToRetryFn(t *testing.T) {
 		assert.Equal(t, tc.wantDelay, delay, "%d - delay", i)
 	}
 }
+
+type roundTripperOnly struct{}
+
+func (rt roundTripperOnly) RoundTrip(req *http.Request) (*http.Response, error) {
+	return nil, io.EOF
+}
+
+func TestNewTransportNoCancel(t *testing.T) {
+	def := http.DefaultTransport
+	http.DefaultTransport = roundTripperOnly{}
+	defer func() { http.DefaultTransport = def }()
+
+	_, err := NewTransport(nil, RetryAny(), NoDelay())
+	assert.NotNil(t, err)
+	t.Logf("%#v", err)
+}
