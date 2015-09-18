@@ -60,6 +60,12 @@ type temporaryer interface {
 	Temporary() bool
 }
 
+// another terribly named interface to detect errors due to timeouts, so
+// that no retry is attempted (timeouts must be honored).
+type timeouter interface {
+	Timeout() bool
+}
+
 // CancelRoundTripper is a RoundTripper that supports CancelRequest.
 // The *http.Transport type implements this interface.
 type CancelRoundTripper interface {
@@ -299,6 +305,11 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		res, err := t.CancelRoundTripper.RoundTrip(req)
 		if preventRetry {
 			return res, err
+		}
+		if toErr, ok := err.(timeouter); ok {
+			if toErr.Timeout() {
+				return res, err
+			}
 		}
 
 		retry, delay := t.retry(Attempt{
