@@ -331,14 +331,16 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			attempt++
 		case <-req.Cancel:
 			// request canceled by caller, don't retry
-			return nil, io.EOF // TODO : return timeout error
+			return nil, errors.New("net/http: request canceled")
 		case <-ch:
 			// request canceled by call to CancelRequest, don't retry
-			return nil, io.EOF // TODO : return timeout error
+			return nil, errors.New("net/http: request canceled")
 		}
 	}
 }
 
+// CancelRequest cancels the specified request, preventing any pending
+// retry.
 func (t *Transport) CancelRequest(req *http.Request) {
 	var ch chan struct{}
 	t.mu.Lock()

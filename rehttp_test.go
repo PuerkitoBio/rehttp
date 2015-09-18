@@ -120,7 +120,7 @@ func assertNetTimeoutErr(t *testing.T, err error) {
 		nerr, ok := err.(net.Error)
 		require.True(t, ok)
 		assert.True(t, nerr.Timeout())
-		t.Log(err)
+		t.Logf("%#v", err)
 	}
 }
 
@@ -131,7 +131,7 @@ func assertURLTimeoutErr(t *testing.T, err error) {
 		nerr, ok := uerr.Err.(net.Error)
 		require.True(t, ok)
 		assert.True(t, nerr.Timeout())
-		t.Log(nerr)
+		t.Logf("%#v", nerr)
 	}
 }
 
@@ -150,6 +150,7 @@ func TestClientTimeoutOnRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	// timeout while waiting for retry request
 	tr, err := NewTransport(nil, RetryStatus500(1), NoDelay())
 	require.Nil(t, err)
 	c := &http.Client{
@@ -160,6 +161,20 @@ func TestClientTimeoutOnRetry(t *testing.T) {
 	require.Nil(t, res)
 	assertURLTimeoutErr(t, err)
 	assert.Equal(t, 2, callCnt)
+
+	callCnt = 0
+
+	// timeout while waiting for retry delay
+	tr, err = NewTransport(nil, RetryStatus500(1), ConstDelay(2*time.Second))
+	require.Nil(t, err)
+	c = &http.Client{
+		Transport: tr,
+		Timeout:   time.Second,
+	}
+	res, err = c.Get(srv.URL + "/test")
+	require.Nil(t, res)
+	assertURLTimeoutErr(t, err)
+	assert.Equal(t, 1, callCnt)
 }
 
 func TestClientTimeout(t *testing.T) {
