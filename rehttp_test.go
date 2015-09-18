@@ -107,8 +107,11 @@ func TestClientTimeoutSlowBody(t *testing.T) {
 	}
 
 	// test with retry transport
+	tr, err := NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second))
+	require.Nil(t, err)
+
 	c := &http.Client{
-		Transport: NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second)),
+		Transport: tr,
 		Timeout:   time.Second,
 	}
 	runWithClient(c)
@@ -139,8 +142,10 @@ func TestClientTimeout(t *testing.T) {
 	}
 
 	// test with retry transport
+	tr, err := NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second))
+	require.Nil(t, err)
 	c := &http.Client{
-		Transport: NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second)),
+		Transport: tr,
 		Timeout:   time.Second,
 	}
 	res, err := c.Get(srv.URL + "/test")
@@ -158,10 +163,13 @@ func TestClientRetry(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
+	tr, err := NewTransport(mock, RetryTemporaryErr(1), NoDelay())
+	require.Nil(t, err)
+
 	client := &http.Client{
-		Transport: NewTransport(mock, RetryTemporaryErr(1), NoDelay()),
+		Transport: tr,
 	}
-	_, err := client.Get("http://example.com")
+	_, err = client.Get("http://example.com")
 	if assert.NotNil(t, err) {
 		uerr, ok := err.(*url.Error)
 		require.True(t, ok)
@@ -177,10 +185,13 @@ func TestClientFailBufferBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
+	tr, err := NewTransport(mock, RetryTemporaryErr(1), NoDelay())
+	require.Nil(t, err)
+
 	client := &http.Client{
-		Transport: NewTransport(mock, RetryTemporaryErr(1), NoDelay()),
+		Transport: tr,
 	}
-	_, err := client.Post("http://example.com", "text/plain", iotest.TimeoutReader(strings.NewReader("hello")))
+	_, err = client.Post("http://example.com", "text/plain", iotest.TimeoutReader(strings.NewReader("hello")))
 	if assert.NotNil(t, err) {
 		uerr, ok := err.(*url.Error)
 		require.True(t, ok)
@@ -196,13 +207,15 @@ func TestClientPreventRetryWithBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr := NewTransport(mock, RetryTemporaryErr(1), NoDelay())
+	tr, err := NewTransport(mock, RetryTemporaryErr(1), NoDelay())
+	require.Nil(t, err)
 	tr.PreventRetryWithBody = true
+
 	client := &http.Client{
 		Transport: tr,
 	}
 
-	_, err := client.Post("http://example.com", "text/plain", strings.NewReader("test"))
+	_, err = client.Post("http://example.com", "text/plain", strings.NewReader("test"))
 	if assert.NotNil(t, err) {
 		uerr, ok := err.(*url.Error)
 		require.True(t, ok)
@@ -219,10 +232,13 @@ func TestClientRetryWithBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
+	tr, err := NewTransport(mock, RetryTemporaryErr(1), NoDelay())
+	require.Nil(t, err)
+
 	client := &http.Client{
-		Transport: NewTransport(mock, RetryTemporaryErr(1), NoDelay()),
+		Transport: tr,
 	}
-	_, err := client.Post("http://example.com", "text/plain", strings.NewReader("hello"))
+	_, err = client.Post("http://example.com", "text/plain", strings.NewReader("hello"))
 	if assert.NotNil(t, err) {
 		uerr, ok := err.(*url.Error)
 		require.True(t, ok)
@@ -239,8 +255,11 @@ func TestClientNoRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	tr, err := NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second))
+	require.Nil(t, err)
+
 	c := &http.Client{
-		Transport: NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second)),
+		Transport: tr,
 	}
 	res, err := c.Get(srv.URL + "/test")
 	require.Nil(t, err)
@@ -257,7 +276,7 @@ func TestNoDelay(t *testing.T) {
 	fn := NoDelay()
 	want := time.Duration(0)
 	for i := 0; i < 5; i++ {
-		delay := fn(nil, nil, i, nil)
+		delay := fn(Attempt{Index: i})
 		assert.Equal(t, want, delay, "%d", i)
 	}
 }
@@ -266,7 +285,7 @@ func TestConstDelay(t *testing.T) {
 	want := 2 * time.Second
 	fn := ConstDelay(want)
 	for i := 0; i < 5; i++ {
-		delay := fn(nil, nil, i, nil)
+		delay := fn(Attempt{Index: i})
 		assert.Equal(t, want, delay, "%d", i)
 	}
 }
@@ -276,7 +295,7 @@ func TestLinearDelay(t *testing.T) {
 	fn := LinearDelay(initial)
 	want := []time.Duration{2 * time.Second, 4 * time.Second, 6 * time.Second, 8 * time.Second, 10 * time.Second}
 	for i := 0; i < len(want); i++ {
-		got := fn(nil, nil, i, nil)
+		got := fn(Attempt{Index: i})
 		assert.Equal(t, want[i], got, "%d", i)
 	}
 }
@@ -286,7 +305,7 @@ func TestExponentialDelay(t *testing.T) {
 	fn := ExponentialDelay(initial, time.Second)
 	want := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 32 * time.Second}
 	for i := 0; i < len(want); i++ {
-		got := fn(nil, nil, i, nil)
+		got := fn(Attempt{Index: i})
 		assert.Equal(t, want[i], got, "%d", i)
 	}
 
@@ -294,7 +313,7 @@ func TestExponentialDelay(t *testing.T) {
 	fn = ExponentialDelay(initial, 10*time.Millisecond)
 	want = []time.Duration{100 * time.Millisecond, time.Second, 10 * time.Second}
 	for i := 0; i < len(want); i++ {
-		got := fn(nil, nil, i, nil)
+		got := fn(Attempt{Index: i})
 		assert.Equal(t, want[i], got, "%d", i)
 	}
 }
@@ -323,7 +342,7 @@ func TestRetryHTTPMethods(t *testing.T) {
 		fn := RetryHTTPMethods(tc.retries, tc.meths...)
 		req, err := http.NewRequest(tc.inMeth, "", nil)
 		require.Nil(t, err)
-		got := fn(req, nil, tc.att, nil)
+		got := fn(Attempt{Request: req, Index: tc.att})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}
 }
@@ -348,7 +367,7 @@ func TestRetryStatus500(t *testing.T) {
 
 	for i, tc := range cases {
 		fn := RetryStatus500(tc.retries)
-		got := fn(nil, tc.res, tc.att, nil)
+		got := fn(Attempt{Response: tc.res, Index: tc.att})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}
 }
@@ -374,7 +393,7 @@ func TestRetryTemporaryErr(t *testing.T) {
 
 	for i, tc := range cases {
 		fn := RetryTemporaryErr(tc.retries)
-		got := fn(nil, nil, tc.att, tc.err)
+		got := fn(Attempt{Index: tc.att, Error: tc.err})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}
 }
@@ -402,13 +421,18 @@ func TestRetryAll(t *testing.T) {
 		{"GET", 500, 0, io.EOF, false},
 	}
 	for i, tc := range cases {
-		got := fn(&http.Request{Method: tc.method}, &http.Response{StatusCode: tc.status}, tc.att, tc.err)
+		got := fn(Attempt{
+			Request:  &http.Request{Method: tc.method},
+			Response: &http.Response{StatusCode: tc.status},
+			Index:    tc.att,
+			Error:    tc.err,
+		})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}
 
 	// en empty RetryAll always returns true
 	fn = RetryAll()
-	got := fn(nil, nil, 0, nil)
+	got := fn(Attempt{Index: 0})
 	assert.True(t, got, "empty RetryAll")
 }
 
@@ -435,18 +459,23 @@ func TestRetryAny(t *testing.T) {
 		{"GET", 500, 2, tempErr{}, false},
 	}
 	for i, tc := range cases {
-		got := fn(&http.Request{Method: tc.method}, &http.Response{StatusCode: tc.status}, tc.att, tc.err)
+		got := fn(Attempt{
+			Request:  &http.Request{Method: tc.method},
+			Response: &http.Response{StatusCode: tc.status},
+			Index:    tc.att,
+			Error:    tc.err,
+		})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}
 
 	// en empty RetryAny always returns false
 	fn = RetryAny()
-	got := fn(nil, nil, 0, nil)
+	got := fn(Attempt{Index: 0})
 	assert.False(t, got, "empty RetryAny")
 }
 
 func TestToRetryFn(t *testing.T) {
-	fn := ToRetryFn(RetryTemporaryErr(2), LinearDelay(time.Second))
+	fn := toRetryFn(RetryTemporaryErr(2), LinearDelay(time.Second))
 
 	cases := []struct {
 		err       error
@@ -462,7 +491,7 @@ func TestToRetryFn(t *testing.T) {
 	}
 
 	for i, tc := range cases {
-		retry, delay := fn(nil, nil, tc.att, tc.err)
+		retry, delay := fn(Attempt{Index: tc.att, Error: tc.err})
 		assert.Equal(t, tc.wantRetry, retry, "%d - retry?", i)
 		assert.Equal(t, tc.wantDelay, delay, "%d - delay", i)
 	}
