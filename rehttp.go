@@ -207,13 +207,6 @@ func ConstDelay(delay time.Duration) DelayFn {
 	}
 }
 
-// NoDelay returns a DelayFn that always returns 0.
-func NoDelay() DelayFn {
-	return func(attempt Attempt) time.Duration {
-		return 0
-	}
-}
-
 // ExponentialDelay returns a DelayFn that returns an exponential delay from
 // the initialDelay (in the provided base, e.g. an initialDelay of 2s in base
 // time.Second will give delays of 2s, 4s, 8s...). There is no special case

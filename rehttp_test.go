@@ -109,7 +109,7 @@ func TestContextCancelOnRetry(t *testing.T) {
 	defer srv.Close()
 
 	// cancel while waiting on retry response
-	tr, err := NewTransport(nil, RetryStatus500(1), NoDelay())
+	tr, err := NewTransport(nil, RetryStatus500(1), ConstDelay(0))
 	require.Nil(t, err)
 	c := &http.Client{
 		Transport: tr,
@@ -153,7 +153,7 @@ func TestContextCancel(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tr, err := NewTransport(nil, RetryStatus500(1), NoDelay())
+	tr, err := NewTransport(nil, RetryStatus500(1), ConstDelay(0))
 	require.Nil(t, err)
 	c := &http.Client{
 		Transport: tr,
@@ -225,7 +225,7 @@ func TestClientTimeoutOnRetry(t *testing.T) {
 	defer srv.Close()
 
 	// timeout while waiting for retry request
-	tr, err := NewTransport(nil, RetryStatus500(1), NoDelay())
+	tr, err := NewTransport(nil, RetryStatus500(1), ConstDelay(0))
 	require.Nil(t, err)
 	c := &http.Client{
 		Transport: tr,
@@ -319,7 +319,7 @@ func TestClientRetry(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr, err := NewTransport(mock, RetryTemporaryErr(1), NoDelay())
+	tr, err := NewTransport(mock, RetryTemporaryErr(1), ConstDelay(0))
 	require.Nil(t, err)
 
 	client := &http.Client{
@@ -341,7 +341,7 @@ func TestClientFailBufferBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr, err := NewTransport(mock, RetryTemporaryErr(1), NoDelay())
+	tr, err := NewTransport(mock, RetryTemporaryErr(1), ConstDelay(0))
 	require.Nil(t, err)
 
 	client := &http.Client{
@@ -363,7 +363,7 @@ func TestClientPreventRetryWithBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr, err := NewTransport(mock, RetryTemporaryErr(1), NoDelay())
+	tr, err := NewTransport(mock, RetryTemporaryErr(1), ConstDelay(0))
 	require.Nil(t, err)
 	tr.PreventRetryWithBody = true
 
@@ -388,7 +388,7 @@ func TestClientRetryWithBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr, err := NewTransport(mock, RetryTemporaryErr(1), NoDelay())
+	tr, err := NewTransport(mock, RetryTemporaryErr(1), ConstDelay(0))
 	require.Nil(t, err)
 
 	client := &http.Client{
@@ -426,15 +426,6 @@ func TestClientNoRetry(t *testing.T) {
 	_, err = io.Copy(&buf, res.Body)
 	require.Nil(t, err)
 	assert.Equal(t, "/test", buf.String())
-}
-
-func TestNoDelay(t *testing.T) {
-	fn := NoDelay()
-	want := time.Duration(0)
-	for i := 0; i < 5; i++ {
-		delay := fn(Attempt{Index: i})
-		assert.Equal(t, want, delay, "%d", i)
-	}
 }
 
 func TestConstDelay(t *testing.T) {
@@ -664,7 +655,7 @@ func TestNewTransportNoCancel(t *testing.T) {
 	http.DefaultTransport = roundTripperOnly{}
 	defer func() { http.DefaultTransport = def }()
 
-	_, err := NewTransport(nil, RetryAny(), NoDelay())
+	_, err := NewTransport(nil, RetryAny(), ConstDelay(0))
 	assert.NotNil(t, err)
 	t.Logf("%#v", err)
 }
