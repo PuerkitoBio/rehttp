@@ -47,11 +47,18 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+	"math"
+	"math/rand"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 )
+
+// PRNG is the *math.Rand value to use to add jitter to the backoff
+// algorithm used in ExponentialDelay. By default it uses a *math.Rand
+// initialized with a source based on the current time in nanoseconds.
+var PRNG = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // terribly named interface to detect errors that support Temporary.
 type temporaryer interface {
@@ -214,6 +221,21 @@ func RetryHTTPMethods(maxRetries int, methods ...string) ShouldRetryFn {
 func ConstDelay(delay time.Duration) DelayFn {
 	return func(attempt Attempt) time.Duration {
 		return delay
+	}
+}
+
+// ExponentialDelay returns a DelayFn that returns a delay between 0 and
+// base * 2^attempt, capped at max.
+//
+// See the full jitter algorithm in:
+// http://www.awsarchitectureblog.com/2015/03/backoff.html
+func ExponentialDelay(base, max time.Duration) DelayFn {
+	return func(attempt Attempt) time.Duration {
+		exp := math.Pow(2, float64(attempt.Index))
+		top := float64(base) * exp
+		return time.Duration(
+			PRNG.Int63n(int64(math.Min(float64(max), top))),
+		)
 	}
 }
 
