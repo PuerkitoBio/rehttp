@@ -5,15 +5,15 @@
 //
 //     tr, err := rehttp.NewTransport(
 //         nil,                            // will use http.DefaultTransport
-//         rehttp.RetryTemporaryErr(3),    // max 3 retries
+//         rehttp.RetryTemporaryErr(3),    // max 3 retries for Temporary errors
 //         rehttp.ConstDelay(time.Second), // wait 1s between retries
 //     )
 //     if err != nil {
-//       // handle err
+//         // handle err
 //     }
 //     client := &http.Client{
-//       Transport: tr,
-//       Timeout: 30 * time.Second, // timeout applies to all retries as a whole
+//         Transport: tr,
+//         Timeout: 30 * time.Second, // timeout applies to all retries as a whole
 //     }
 //
 // The retry strategy is provided by the Transport, which holds
@@ -24,16 +24,15 @@
 // The package offers common delay strategies as ready-made functions that
 // return a DelayFn:
 //     - ConstDelay(delay time.Duration) DelayFn
-//     - NoDelay() DelayFn
-//     - ExponentialDelay(initialDelay, base time.Duration) DelayFn
-//     - LinearDelay(initialDelay time.Duration) DelayFn
 //
 // It also provides common retry predicates that return a ShouldRetryFn:
 //     - RetryTemporaryErr(maxRetries int) ShouldRetryFn
 //     - RetryStatus500(maxRetries int) ShouldRetryFn
 //     - RetryHTTPMethods(maxRetries int, methods ...string) ShouldRetryFn
 //
-// Those can be combined with RetryAny or RetryAll as needed.
+// Those can be combined with RetryAny or RetryAll as needed. RetryAny
+// enables retries if any of the ShouldRetryFn return true, while RetryAll
+// enables retries if all ShouldRetryFn return true.
 //
 // The Transport will buffer the request's body in order to be able to
 // retry the request, as a request attempt will consume and close the
@@ -48,7 +47,6 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
-	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -73,14 +71,23 @@ type CancelRoundTripper interface {
 	CancelRequest(*http.Request)
 }
 
-// Attempt holds the data for a RoundTrip attempt. The Index field is the
-// attempt number corresponding to the Response and Error received, starting
-// at 0.
+// Attempt holds the data for a RoundTrip attempt.
 type Attempt struct {
-	Index    int
-	Request  *http.Request
+	// Index is the attempt index starting at 0.
+	Index int
+
+	// Request is the request for this attempt. If a non-nil Response
+	// is present, this is the same as Response.Request, but since a
+	// Response may not be available, it is guaranteed to be set on this
+	// field.
+	Request *http.Request
+
+	// Response is the response for this attempt. It may be nil if an
+	// error occurred an no response was received.
 	Response *http.Response
-	Error    error
+
+	// Error is the error returned by the attempt, if any.
+	Error error
 }
 
 // retryFn is the signature for functions that implement retry strategies.
@@ -181,6 +188,9 @@ func RetryStatus500(maxRetries int) ShouldRetryFn {
 
 // RetryHTTPMethods returns a ShouldRetryFn that retries up to maxRetries
 // times if the request's HTTP method is one of the provided methods.
+// It is meant to be used in conjunction with another ShouldRetryFn such
+// as RetryTemporaryErr combined using RetryAll, otherwise this function
+// will retry any successful request made with one of the provided methods.
 func RetryHTTPMethods(maxRetries int, methods ...string) ShouldRetryFn {
 	for i, m := range methods {
 		methods[i] = strings.ToUpper(m)
@@ -207,26 +217,6 @@ func ConstDelay(delay time.Duration) DelayFn {
 	}
 }
 
-// ExponentialDelay returns a DelayFn that returns an exponential delay from
-// the initialDelay (in the provided base, e.g. an initialDelay of 2s in base
-// time.Second will give delays of 2s, 4s, 8s...). There is no special case
-// handling, so passing 1s in a time.Second base will yield 1s every time.
-func ExponentialDelay(initialDelay, base time.Duration) DelayFn {
-	inBase := float64(initialDelay) / float64(base)
-	return func(attempt Attempt) time.Duration {
-		newVal := math.Pow(inBase, float64(attempt.Index+1))
-		return time.Duration(newVal * float64(base))
-	}
-}
-
-// LinearDelay returns a DelayFn that returns a delay that grows linearly
-// based on the number of attempts.
-func LinearDelay(initialDelay time.Duration) DelayFn {
-	return func(attempt Attempt) time.Duration {
-		return time.Duration(attempt.Index+1) * initialDelay
-	}
-}
-
 // Transport wraps a CancelRoundTripper such as *http.Transport and adds
 // retry logic.
 type Transport struct {
@@ -235,7 +225,7 @@ type Transport struct {
 	// PreventRetryWithBody prevents retrying if the request has a body. Since
 	// the body is consumed on a request attempt, in order to retry a request
 	// with a body, the body has to be buffered in memory. Setting this
-	// to true avoids this buffering, the retry logic is bypassed if a body
+	// to true avoids this buffering: the retry logic is bypassed if a body
 	// is present.
 	PreventRetryWithBody bool
 
@@ -251,12 +241,6 @@ type Transport struct {
 	mu    sync.Mutex
 	reqCh map[*http.Request]chan struct{}
 }
-
-// Per Go's doc: "CancelRequest should only be called after RoundTrip
-// has returned."
-//
-// So it should not have an impact on this Transport (it doesn't return before
-// the retries are done).
 
 // RoundTrip implements http.RoundTripper for the Transport type.
 // It calls its underlying RoundTripper to execute the request, and

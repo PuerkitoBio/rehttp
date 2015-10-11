@@ -437,34 +437,6 @@ func TestConstDelay(t *testing.T) {
 	}
 }
 
-func TestLinearDelay(t *testing.T) {
-	initial := 2 * time.Second
-	fn := LinearDelay(initial)
-	want := []time.Duration{2 * time.Second, 4 * time.Second, 6 * time.Second, 8 * time.Second, 10 * time.Second}
-	for i := 0; i < len(want); i++ {
-		got := fn(Attempt{Index: i})
-		assert.Equal(t, want[i], got, "%d", i)
-	}
-}
-
-func TestExponentialDelay(t *testing.T) {
-	initial := 2 * time.Second
-	fn := ExponentialDelay(initial, time.Second)
-	want := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 32 * time.Second}
-	for i := 0; i < len(want); i++ {
-		got := fn(Attempt{Index: i})
-		assert.Equal(t, want[i], got, "%d", i)
-	}
-
-	initial = 100 * time.Millisecond
-	fn = ExponentialDelay(initial, 10*time.Millisecond)
-	want = []time.Duration{100 * time.Millisecond, time.Second, 10 * time.Second}
-	for i := 0; i < len(want); i++ {
-		got := fn(Attempt{Index: i})
-		assert.Equal(t, want[i], got, "%d", i)
-	}
-}
-
 func TestRetryHTTPMethods(t *testing.T) {
 	cases := []struct {
 		retries int
@@ -622,7 +594,7 @@ func TestRetryAny(t *testing.T) {
 }
 
 func TestToRetryFn(t *testing.T) {
-	fn := toRetryFn(RetryTemporaryErr(2), LinearDelay(time.Second))
+	fn := toRetryFn(RetryTemporaryErr(2), ConstDelay(time.Second))
 
 	cases := []struct {
 		err       error
@@ -633,7 +605,7 @@ func TestToRetryFn(t *testing.T) {
 		{err: nil, att: 0, wantRetry: false, wantDelay: 0},
 		{err: io.EOF, att: 0, wantRetry: false, wantDelay: 0},
 		{err: tempErr{}, att: 0, wantRetry: true, wantDelay: time.Second},
-		{err: tempErr{}, att: 1, wantRetry: true, wantDelay: 2 * time.Second},
+		{err: tempErr{}, att: 1, wantRetry: true, wantDelay: time.Second},
 		{err: tempErr{}, att: 2, wantRetry: false, wantDelay: 0},
 	}
 
