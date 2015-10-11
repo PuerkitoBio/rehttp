@@ -24,6 +24,7 @@
 // The package offers common delay strategies as ready-made functions that
 // return a DelayFn:
 //     - ConstDelay(delay time.Duration) DelayFn
+//     - ExponentialDelay(base, max time.Duration) DelayFn
 //
 // It also provides common retry predicates that return a ShouldRetryFn:
 //     - RetryTemporaryErr(maxRetries int) ShouldRetryFn
@@ -63,12 +64,6 @@ var PRNG = rand.New(rand.NewSource(time.Now().UnixNano()))
 // terribly named interface to detect errors that support Temporary.
 type temporaryer interface {
 	Temporary() bool
-}
-
-// another terribly named interface to detect errors due to timeouts, so
-// that no retry is attempted (timeouts must be honored).
-type timeouter interface {
-	Timeout() bool
 }
 
 // CancelRoundTripper is a RoundTripper that supports CancelRequest.
@@ -304,11 +299,6 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		res, err := t.CancelRoundTripper.RoundTrip(req)
 		if preventRetry {
 			return res, err
-		}
-		if toErr, ok := err.(timeouter); ok {
-			if toErr.Timeout() {
-				return res, err
-			}
 		}
 
 		retry, delay := t.retry(Attempt{

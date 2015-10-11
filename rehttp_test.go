@@ -286,7 +286,6 @@ func TestClientTimeout(t *testing.T) {
 func TestTransportTimeout(t *testing.T) {
 	// server that doesn't reply before the timeout
 	wg := sync.WaitGroup{}
-	wg.Add(1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second)
 		fmt.Fprint(w, r.URL.Path)
@@ -301,12 +300,15 @@ func TestTransportTimeout(t *testing.T) {
 	tr, err := NewTransport(httpTr, RetryTemporaryErr(1), ConstDelay(time.Second))
 	require.Nil(t, err)
 	c := &http.Client{Transport: tr}
+	// ResponseHeaderTimeout causes a TemporaryErr, so it will retry once
+	wg.Add(2)
 	res, err := c.Get(srv.URL + "/test")
 	require.Nil(t, res)
 	assertURLTimeoutErr(t, err)
 
 	// test with HTTP transport, make sure it returns the same error
 	c = &http.Client{Transport: httpTr}
+	wg.Add(1)
 	res, err = c.Get(srv.URL + "/test")
 	require.Nil(t, res)
 	assertURLTimeoutErr(t, err)
