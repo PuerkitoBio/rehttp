@@ -323,6 +323,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		// close the disposed response's body, if any
 		if res != nil {
+			io.Copy(ioutil.Discard, res.Body)
 			res.Body.Close()
 		}
 
