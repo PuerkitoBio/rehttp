@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -275,4 +276,70 @@ func TestClientNoRetry(t *testing.T) {
 	_, err = io.Copy(&buf, res.Body)
 	require.Nil(t, err)
 	assert.Equal(t, "/test", buf.String())
+}
+
+func TestClientRetryWithBody(t *testing.T) {
+	fail := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if fail {
+			w.WriteHeader(500)
+			fail = false
+			return
+		}
+
+		io.Copy(w, r.Body)
+	}))
+	defer srv.Close()
+
+	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 500)), ConstDelay(0))
+
+	c := &http.Client{
+		Transport: tr,
+	}
+	res, err := c.Post(srv.URL+"/test", "", strings.NewReader("body"))
+	require.Nil(t, err)
+	defer res.Body.Close()
+
+	assert.Equal(t, 200, res.StatusCode)
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, res.Body)
+	require.Nil(t, err)
+	assert.Equal(t, "body", buf.String())
+	assert.False(t, fail)
+}
+
+func TestClientRetryWithHeaders(t *testing.T) {
+	fail := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if fail {
+			w.WriteHeader(500)
+			fail = false
+			return
+		}
+
+		for k, v := range r.Header {
+			w.Header()[k] = v
+		}
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 500)), ConstDelay(0))
+
+	c := &http.Client{
+		Transport: tr,
+	}
+	req, err := http.NewRequest("GET", srv.URL+"/test", nil)
+	require.NoError(t, err)
+	req.Header.Set("X-1", "a")
+	req.Header.Set("X-2", "b")
+
+	res, err := c.Do(req)
+	require.Nil(t, err)
+	defer res.Body.Close()
+
+	assert.Equal(t, 200, res.StatusCode)
+	assert.Equal(t, "a", res.Header.Get("X-1"))
+	assert.Equal(t, "b", res.Header.Get("X-2"))
+	assert.False(t, fail)
 }
