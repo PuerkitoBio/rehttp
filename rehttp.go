@@ -13,13 +13,13 @@
 //     }
 //     client := &http.Client{
 //         Transport: tr,
-//         Timeout: 30 * time.Second, // timeout applies to all retries as a whole
+//         Timeout: 10 * time.Second, // Client timeout applies to all retries as a whole
 //     }
 //
-// The retry strategy is provided by the Transport, which holds
-// a function that returns whether or not the request should be retried,
-// and if so, what delay to apply before retrying, based on the ShouldRetryFn
-// and DelayFn functions passed to NewTransport.
+// The retry strategy is provided by the Transport, which determines
+// whether or not the request should be retried, and if so, what delay
+// to apply before retrying, based on the ShouldRetryFn and DelayFn
+// functions passed to NewTransport.
 //
 // The package offers common delay strategies as ready-made functions that
 // return a DelayFn:
