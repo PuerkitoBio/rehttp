@@ -1,11 +1,10 @@
 // Package rehttp implements an HTTP transport that handles retries.
-//
 // An HTTP Client can be created with a *rehttp.Transport as RoundTripper
 // and it will apply the retry strategy to its requests.
 //
 // The retry strategy is provided by the Transport, which determines
 // whether or not the request should be retried, and if so, what delay
-// to apply before retrying, based on the ShouldRetryFn and DelayFn
+// to apply before retrying, based on the RetryFn and DelayFn
 // functions passed to NewTransport.
 //
 // The package offers common delay strategies as ready-made functions that
