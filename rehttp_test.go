@@ -110,7 +110,7 @@ func TestContextCancelOnRetry(t *testing.T) {
 	defer srv.Close()
 
 	// cancel while waiting on retry response
-	tr := NewTransport(nil, RetryStatus(1, 500, 600), ConstDelay(0))
+	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 600)), ConstDelay(0))
 	c := &http.Client{
 		Transport: tr,
 	}
@@ -126,7 +126,7 @@ func TestContextCancelOnRetry(t *testing.T) {
 
 	// cancel while waiting on delay
 	atomic.StoreInt32(&callCnt, 0)
-	tr = NewTransport(nil, RetryStatus(1, 500, 600), ConstDelay(2*time.Second))
+	tr = NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 600)), ConstDelay(2*time.Second))
 	c = &http.Client{
 		Transport: tr,
 	}
@@ -152,7 +152,7 @@ func TestContextCancel(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tr := NewTransport(nil, RetryStatus(1, 500, 600), ConstDelay(0))
+	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 600)), ConstDelay(0))
 	c := &http.Client{
 		Transport: tr,
 	}
@@ -193,7 +193,7 @@ func TestClientTimeoutSlowBody(t *testing.T) {
 	}
 
 	// test with retry transport
-	tr := NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second))
+	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(2), RetryTemporaryErr()), ConstDelay(time.Second))
 
 	c := &http.Client{
 		Transport: tr,
@@ -222,7 +222,7 @@ func TestClientTimeoutOnRetry(t *testing.T) {
 	defer srv.Close()
 
 	// timeout while waiting for retry request
-	tr := NewTransport(nil, RetryStatus(1, 500, 600), ConstDelay(0))
+	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 600)), ConstDelay(0))
 	c := &http.Client{
 		Transport: tr,
 		Timeout:   time.Second,
@@ -235,7 +235,7 @@ func TestClientTimeoutOnRetry(t *testing.T) {
 	atomic.StoreInt32(&callCnt, 0)
 
 	// timeout while waiting for retry delay
-	tr = NewTransport(nil, RetryStatus(1, 500, 600), ConstDelay(2*time.Second))
+	tr = NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 600)), ConstDelay(2*time.Second))
 	c = &http.Client{
 		Transport: tr,
 		Timeout:   time.Second,
@@ -257,7 +257,7 @@ func TestClientTimeout(t *testing.T) {
 	defer srv.Close()
 
 	// test with retry transport
-	tr := NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second))
+	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(2), RetryTemporaryErr()), ConstDelay(time.Second))
 	c := &http.Client{
 		Transport: tr,
 		Timeout:   time.Second,
@@ -291,7 +291,7 @@ func TestTransportTimeout(t *testing.T) {
 	httpTr := &http.Transport{
 		ResponseHeaderTimeout: time.Second,
 	}
-	tr := NewTransport(httpTr, RetryTemporaryErr(1), ConstDelay(time.Second))
+	tr := NewTransport(httpTr, RetryAll(RetryMaxAttempts(1), RetryTemporaryErr()), ConstDelay(time.Second))
 	c := &http.Client{Transport: tr}
 	// ResponseHeaderTimeout causes a TemporaryErr, so it will retry once
 	wg.Add(2)
@@ -315,7 +315,7 @@ func TestClientRetry(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr := NewTransport(mock, RetryTemporaryErr(1), ConstDelay(0))
+	tr := NewTransport(mock, RetryAll(RetryMaxAttempts(1), RetryTemporaryErr()), ConstDelay(0))
 
 	client := &http.Client{
 		Transport: tr,
@@ -336,7 +336,7 @@ func TestClientFailBufferBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr := NewTransport(mock, RetryTemporaryErr(1), ConstDelay(0))
+	tr := NewTransport(mock, RetryAll(RetryMaxAttempts(1), RetryTemporaryErr()), ConstDelay(0))
 
 	client := &http.Client{
 		Transport: tr,
@@ -357,7 +357,7 @@ func TestClientPreventRetryWithBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr := NewTransport(mock, RetryTemporaryErr(1), ConstDelay(0))
+	tr := NewTransport(mock, RetryAll(RetryMaxAttempts(1), RetryTemporaryErr()), ConstDelay(0))
 	tr.PreventRetryWithBody = true
 
 	client := &http.Client{
@@ -381,7 +381,7 @@ func TestClientRetryWithBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr := NewTransport(mock, RetryTemporaryErr(1), ConstDelay(0))
+	tr := NewTransport(mock, RetryAll(RetryMaxAttempts(1), RetryTemporaryErr()), ConstDelay(0))
 
 	client := &http.Client{
 		Transport: tr,
@@ -403,7 +403,7 @@ func TestClientNoRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tr := NewTransport(nil, RetryTemporaryErr(2), ConstDelay(time.Second))
+	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(2), RetryTemporaryErr()), ConstDelay(time.Second))
 
 	c := &http.Client{
 		Transport: tr,
@@ -460,7 +460,7 @@ func TestRetryHTTPMethods(t *testing.T) {
 	}
 
 	for i, tc := range cases {
-		fn := RetryHTTPMethods(tc.retries, tc.meths...)
+		fn := RetryAll(RetryMaxAttempts(tc.retries), RetryHTTPMethods(tc.meths...))
 		req, err := http.NewRequest(tc.inMeth, "", nil)
 		require.Nil(t, err)
 		got := fn(Attempt{Request: req, Index: tc.att})
@@ -487,7 +487,7 @@ func TestRetryStatus(t *testing.T) {
 	}
 
 	for i, tc := range cases {
-		fn := RetryStatus(tc.retries, 500, 500)
+		fn := RetryAll(RetryMaxAttempts(tc.retries), RetryStatusRange(500, 500))
 		got := fn(Attempt{Response: tc.res, Index: tc.att})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}
@@ -513,17 +513,18 @@ func TestRetryTemporaryErr(t *testing.T) {
 	}
 
 	for i, tc := range cases {
-		fn := RetryTemporaryErr(tc.retries)
+		fn := RetryAll(RetryMaxAttempts(tc.retries), RetryTemporaryErr())
 		got := fn(Attempt{Index: tc.att, Error: tc.err})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}
 }
 
 func TestRetryAll(t *testing.T) {
-	status := RetryStatus(2, 500, 600)
-	temp := RetryTemporaryErr(2)
-	meths := RetryHTTPMethods(2, "GET")
-	fn := RetryAll(status, temp, meths)
+	max := RetryMaxAttempts(2)
+	status := RetryStatusRange(500, 600)
+	temp := RetryTemporaryErr()
+	meths := RetryHTTPMethods("GET")
+	fn := RetryAll(max, status, temp, meths)
 
 	cases := []struct {
 		method string
@@ -558,10 +559,12 @@ func TestRetryAll(t *testing.T) {
 }
 
 func TestRetryAny(t *testing.T) {
-	status := RetryStatus(2, 500, 600)
-	temp := RetryTemporaryErr(2)
-	meths := RetryHTTPMethods(2, "GET")
+	max := RetryMaxAttempts(2)
+	status := RetryStatusRange(500, 600)
+	temp := RetryTemporaryErr()
+	meths := RetryHTTPMethods("GET")
 	fn := RetryAny(status, temp, meths)
+	fn = RetryAll(max, fn)
 
 	cases := []struct {
 		method string
@@ -596,7 +599,7 @@ func TestRetryAny(t *testing.T) {
 }
 
 func TestToRetryFn(t *testing.T) {
-	fn := toRetryFn(RetryTemporaryErr(2), ConstDelay(time.Second))
+	fn := toRetryFn(RetryAll(RetryMaxAttempts(2), RetryTemporaryErr()), ConstDelay(time.Second))
 
 	cases := []struct {
 		err       error

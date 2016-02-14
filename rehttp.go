@@ -12,20 +12,23 @@
 //     - ConstDelay(delay time.Duration) DelayFn
 //     - ExpJitterDelay(base, max time.Duration) DelayFn
 //
-// It also provides common retry predicates that return a RetryFn:
-//     - RetryTemporaryErr(maxRetries int) RetryFn
-//     - RetryStatus(maxRetries int, fromStatus, toStatus int) RetryFn
-//     - RetryHTTPMethods(maxRetries int, methods ...string) RetryFn
+// It also provides common retry helpers that return a RetryFn:
+//     - RetryErrPredicate(func(error) bool) RetryFn
+//     - RetryHTTPMethods(methods ...string) RetryFn
+//     - RetryMaxAttempts(max int) RetryFn
+//     - RetryStatuses(statuses ...int) RetryFn
+//     - RetryStatusRange(fromStatus, toStatus int) RetryFn
+//     - RetryTemporaryErr() RetryFn
 //
 // Those can be combined with RetryAny or RetryAll as needed. RetryAny
 // enables retries if any of the RetryFn return true, while RetryAll
 // enables retries if all RetryFn return true.
 //
-// The Transport will buffer the request's body in order to be able to
-// retry the request, as a request attempt will consume and close the
-// existing body. Sometimes this is not desirable, so it can be prevented
-// by setting PreventRetryWithBody to true on the Transport. Doing so
-// will disable retries when a request has a non-nil body.
+// By default, the Transport will buffer the request's body in order to
+// be able to retry the request, as a request attempt will consume and
+// close the existing body. Sometimes this is not desirable, so it can
+// be prevented by setting PreventRetryWithBody to true on the Transport.
+// Doing so will disable retries when a request has a non-nil body.
 //
 // This package requires Go version 1.5+, since it uses the new
 // http.Request.Cancel field in order to cancel requests. It doesn't
@@ -47,7 +50,7 @@ import (
 )
 
 // PRNG is the *math.Rand value to use to add jitter to the backoff
-// algorithm used in ExponentialDelay. By default it uses a *rand.Rand
+// algorithm used in ExpJitterDelay. By default it uses a *rand.Rand
 // initialized with a source based on the current time in nanoseconds.
 var PRNG = rand.New(rand.NewSource(time.Now().UnixNano()))
 
@@ -103,8 +106,7 @@ func NewTransport(rt http.RoundTripper, retry RetryFn, delay DelayFn) *Transport
 // toRetryFn combines retry and delay into a retryFn.
 func toRetryFn(retry RetryFn, delay DelayFn) retryFn {
 	return func(attempt Attempt) (bool, time.Duration) {
-		ok := retry(attempt)
-		if !ok {
+		if ok := retry(attempt); !ok {
 			return false, 0
 		}
 		return true, delay(attempt)
@@ -137,50 +139,60 @@ func RetryAll(retryFns ...RetryFn) RetryFn {
 	}
 }
 
-// RetryTemporaryErr returns a RetryFn that retries up to maxRetries
-// times for a temporary error. A temporary error is one that implements
-// the Temporary() bool method. Most errors from the net package implement
-// this.
-func RetryTemporaryErr(maxRetries int) RetryFn {
+// RetryMaxAttempts returns a RetryFn that retries if the number of
+// attempts is less than or equal to max.
+func RetryMaxAttempts(max int) RetryFn {
 	return func(attempt Attempt) bool {
-		if attempt.Index >= maxRetries {
-			return false
-		}
-		if terr, ok := attempt.Error.(temporaryer); ok {
-			return terr.Temporary()
-		}
-		return false
+		// < instead of <= because attempt.Index is 0-based
+		return attempt.Index < max
 	}
 }
 
-// RetryStatus returns a RetryFn that retries up to maxRetries times
-// for a status code in the provided range, inclusively (that is, it
-// retries if fromStatus <= status <= toStatus).
-func RetryStatus(maxRetries, fromStatus, toStatus int) RetryFn {
+// RetryErrPredicate returns a RetryFn that retries if the provided
+// error predicate - a function that receives an error and returns a
+// boolean - returns true for the error associated with the Attempt.
+// Note that fn may be called with a nil error.
+func RetryErrPredicate(fn func(error) bool) RetryFn {
 	return func(attempt Attempt) bool {
-		if attempt.Index >= maxRetries {
-			return false
+		return fn(attempt.Error)
+	}
+}
+
+// RetryTemporaryErr returns a RetryFn that retries if the Attempt's error
+// is a temporary error. A temporary error is one that implements
+// the Temporary() bool method. Most errors from the net package implement
+// this.
+func RetryTemporaryErr() RetryFn {
+	return RetryErrPredicate(func(err error) bool {
+		if terr, ok := err.(temporaryer); ok {
+			return terr.Temporary()
 		}
+		return false
+	})
+}
+
+// RetryStatusRange returns a RetryFn that retries if the response's status
+// code is in the provided range, inclusively (that is, it retries if
+// fromStatus <= status <= toStatus).
+func RetryStatusRange(fromStatus, toStatus int) RetryFn {
+	return func(attempt Attempt) bool {
 		return attempt.Response != nil &&
 			attempt.Response.StatusCode >= fromStatus &&
 			attempt.Response.StatusCode <= toStatus
 	}
 }
 
-// RetryHTTPMethods returns a RetryFn that retries up to maxRetries
-// times if the request's HTTP method is one of the provided methods.
-// It is meant to be used in conjunction with another RetryFn such
-// as RetryTemporaryErr combined using RetryAll, otherwise this function
-// will retry any successful request made with one of the provided methods.
-func RetryHTTPMethods(maxRetries int, methods ...string) RetryFn {
+// RetryHTTPMethods returns a RetryFn that retries if the request's
+// HTTP method is one of the provided methods. It is meant to be used
+// in conjunction with another RetryFn such as RetryTemporaryErr combined
+// using RetryAll, otherwise this function will retry any successful
+// request made with one of the provided methods.
+func RetryHTTPMethods(methods ...string) RetryFn {
 	for i, m := range methods {
 		methods[i] = strings.ToUpper(m)
 	}
 
 	return func(attempt Attempt) bool {
-		if attempt.Index >= maxRetries {
-			return false
-		}
 		curMeth := strings.ToUpper(attempt.Request.Method)
 		for _, m := range methods {
 			if curMeth == m {
