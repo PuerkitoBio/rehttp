@@ -29,7 +29,6 @@ type mockRoundTripper struct {
 
 	mu     sync.Mutex
 	calls  int
-	ccalls int
 	bodies []string
 	retFn  func(int, *http.Request) (*http.Response, error)
 }
@@ -51,22 +50,10 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	return m.retFn(att, req)
 }
 
-func (m *mockRoundTripper) CancelRequest(req *http.Request) {
-	m.mu.Lock()
-	m.ccalls++
-	m.mu.Unlock()
-}
-
 func (m *mockRoundTripper) Calls() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.calls
-}
-
-func (m *mockRoundTripper) CancelCalls() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.ccalls
 }
 
 func (m *mockRoundTripper) Bodies() []string {
@@ -144,7 +131,6 @@ func TestContextCancelOnRetry(t *testing.T) {
 func TestContextCancel(t *testing.T) {
 	// server that doesn't reply before the timeout
 	wg := sync.WaitGroup{}
-	wg.Add(1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second)
 		fmt.Fprint(w, r.URL.Path)
@@ -160,6 +146,7 @@ func TestContextCancel(t *testing.T) {
 	ctx, cancelFn := context.WithDeadline(context.Background(), time.Now().Add(time.Second))
 	defer cancelFn()
 
+	wg.Add(1)
 	res, err := ctxhttp.Get(ctx, c, srv.URL+"/test")
 	require.Nil(t, res)
 
@@ -327,7 +314,6 @@ func TestClientRetry(t *testing.T) {
 		assert.Equal(t, tempErr{}, uerr.Err)
 	}
 	assert.Equal(t, 2, mock.Calls())
-	assert.Equal(t, 0, mock.CancelCalls())
 }
 
 func TestClientFailBufferBody(t *testing.T) {
@@ -348,7 +334,6 @@ func TestClientFailBufferBody(t *testing.T) {
 		assert.Equal(t, iotest.ErrTimeout, uerr.Err)
 	}
 	assert.Equal(t, 0, mock.Calls())
-	assert.Equal(t, 0, mock.CancelCalls())
 }
 
 func TestClientPreventRetryWithBody(t *testing.T) {
@@ -371,7 +356,6 @@ func TestClientPreventRetryWithBody(t *testing.T) {
 		assert.Equal(t, tempErr{}, uerr.Err)
 	}
 	assert.Equal(t, 1, mock.Calls()) // did not retry
-	assert.Equal(t, 0, mock.CancelCalls())
 	assert.Equal(t, []string{"test"}, mock.Bodies())
 }
 
@@ -393,7 +377,6 @@ func TestClientRetryWithBody(t *testing.T) {
 		assert.Equal(t, tempErr{}, uerr.Err)
 	}
 	assert.Equal(t, 2, mock.Calls())
-	assert.Equal(t, 0, mock.CancelCalls())
 	assert.Equal(t, []string{"hello", "hello"}, mock.Bodies())
 }
 
@@ -468,7 +451,7 @@ func TestRetryHTTPMethods(t *testing.T) {
 	}
 }
 
-func TestRetryStatus(t *testing.T) {
+func TestRetryStatusRange(t *testing.T) {
 	cases := []struct {
 		retries int
 		res     *http.Response
@@ -488,6 +471,34 @@ func TestRetryStatus(t *testing.T) {
 
 	for i, tc := range cases {
 		fn := RetryAll(RetryMaxAttempts(tc.retries), RetryStatusRange(500, 500))
+		got := fn(Attempt{Response: tc.res, Index: tc.att})
+		assert.Equal(t, tc.want, got, "%d", i)
+	}
+}
+
+func TestRetryStatuses(t *testing.T) {
+	cases := []struct {
+		retries int
+		res     *http.Response
+		att     int
+		want    bool
+	}{
+		{retries: 1, res: nil, att: 0, want: false},
+		{retries: 1, res: nil, att: 1, want: false},
+		{retries: 1, res: &http.Response{StatusCode: 200}, att: 0, want: false},
+		{retries: 1, res: &http.Response{StatusCode: 400}, att: 0, want: false},
+		{retries: 1, res: &http.Response{StatusCode: 401}, att: 0, want: true},
+		{retries: 1, res: &http.Response{StatusCode: 401}, att: 1, want: false},
+		{retries: 1, res: &http.Response{StatusCode: 402}, att: 0, want: false},
+		{retries: 1, res: &http.Response{StatusCode: 500}, att: 0, want: true},
+		{retries: 1, res: &http.Response{StatusCode: 500}, att: 1, want: false},
+		{retries: 2, res: &http.Response{StatusCode: 500}, att: 0, want: true},
+		{retries: 2, res: &http.Response{StatusCode: 500}, att: 1, want: true},
+		{retries: 2, res: &http.Response{StatusCode: 500}, att: 2, want: false},
+	}
+
+	for i, tc := range cases {
+		fn := RetryAll(RetryMaxAttempts(tc.retries), RetryStatuses(401, 500))
 		got := fn(Attempt{Response: tc.res, Index: tc.att})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}

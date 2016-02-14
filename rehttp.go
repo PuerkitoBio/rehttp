@@ -182,6 +182,22 @@ func RetryStatusRange(fromStatus, toStatus int) RetryFn {
 	}
 }
 
+// RetryStatuses returns a RetryFn that retries if the response's status
+// code is one of the provided statuses.
+func RetryStatuses(statuses ...int) RetryFn {
+	return func(attempt Attempt) bool {
+		if attempt.Response == nil {
+			return false
+		}
+		for _, st := range statuses {
+			if st == attempt.Response.StatusCode {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 // RetryHTTPMethods returns a RetryFn that retries if the request's
 // HTTP method is one of the provided methods. It is meant to be used
 // in conjunction with another RetryFn such as RetryTemporaryErr combined
