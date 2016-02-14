@@ -167,7 +167,7 @@ func TestClientTimeoutSlowBody(t *testing.T) {
 	defer srv.Close()
 
 	runWithClient := func(c *http.Client) {
-		res, err := c.Get(srv.URL + "/test")
+		res, err := c.Get(srv.URL + "/testing")
 
 		// should receive a response
 		require.Nil(t, err)
