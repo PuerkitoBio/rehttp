@@ -13,7 +13,7 @@
 //     - ExpJitterDelay(base, max time.Duration) DelayFn
 //
 // It also provides common retry helpers that return a RetryFn:
-//     - RetryErrPredicate(func(error) bool) RetryFn
+//     - RetryIsErr(func(error) bool) RetryFn
 //     - RetryHTTPMethods(methods ...string) RetryFn
 //     - RetryMaxAttempts(max int) RetryFn
 //     - RetryStatuses(statuses ...int) RetryFn
@@ -148,11 +148,11 @@ func RetryMaxAttempts(max int) RetryFn {
 	}
 }
 
-// RetryErrPredicate returns a RetryFn that retries if the provided
+// RetryIsErr returns a RetryFn that retries if the provided
 // error predicate - a function that receives an error and returns a
 // boolean - returns true for the error associated with the Attempt.
 // Note that fn may be called with a nil error.
-func RetryErrPredicate(fn func(error) bool) RetryFn {
+func RetryIsErr(fn func(error) bool) RetryFn {
 	return func(attempt Attempt) bool {
 		return fn(attempt.Error)
 	}
@@ -163,7 +163,7 @@ func RetryErrPredicate(fn func(error) bool) RetryFn {
 // the Temporary() bool method. Most errors from the net package implement
 // this.
 func RetryTemporaryErr() RetryFn {
-	return RetryErrPredicate(func(err error) bool {
+	return RetryIsErr(func(err error) bool {
 		if terr, ok := err.(temporaryer); ok {
 			return terr.Temporary()
 		}
