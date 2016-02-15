@@ -39,7 +39,7 @@
 //
 // It should work on Go1.5, but only if there is no timeout set on the
 // *http.Client. Go's stdlib will return an error on the first request
-// if that's the case, because it requires a `RoundTripper` that
+// if that's the case, because it requires a RoundTripper that
 // implements the CancelRequest method.
 //
 package rehttp
