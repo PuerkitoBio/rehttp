@@ -58,7 +58,7 @@ func TestMockClientRetry(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr := NewTransport(mock, RetryAll(RetryMaxAttempts(1), RetryTemporaryErr()), ConstDelay(0))
+	tr := NewTransport(mock, RetryAll(RetryMaxRetries(1), RetryTemporaryErr()), ConstDelay(0))
 
 	client := &http.Client{
 		Transport: tr,
@@ -78,7 +78,7 @@ func TestMockClientFailBufferBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr := NewTransport(mock, RetryAll(RetryMaxAttempts(1), RetryTemporaryErr()), ConstDelay(0))
+	tr := NewTransport(mock, RetryAll(RetryMaxRetries(1), RetryTemporaryErr()), ConstDelay(0))
 
 	client := &http.Client{
 		Transport: tr,
@@ -98,7 +98,7 @@ func TestMockClientPreventRetryWithBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr := NewTransport(mock, RetryAll(RetryMaxAttempts(1), RetryTemporaryErr()), ConstDelay(0))
+	tr := NewTransport(mock, RetryAll(RetryMaxRetries(1), RetryTemporaryErr()), ConstDelay(0))
 	tr.PreventRetryWithBody = true
 
 	client := &http.Client{
@@ -121,7 +121,7 @@ func TestMockClientRetryWithBody(t *testing.T) {
 	}
 	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr := NewTransport(mock, RetryAll(RetryMaxAttempts(1), RetryTemporaryErr()), ConstDelay(0))
+	tr := NewTransport(mock, RetryAll(RetryMaxRetries(1), RetryTemporaryErr()), ConstDelay(0))
 
 	client := &http.Client{
 		Transport: tr,

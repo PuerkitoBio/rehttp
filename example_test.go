@@ -4,18 +4,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/icerink/rehttp"
+	"github.com/PuerkitoBio/rehttp"
 )
 
 func Example() {
-	tr, err := rehttp.NewTransport(
+	tr := rehttp.NewTransport(
 		nil, // will use http.DefaultTransport
-		rehttp.RetryTemporaryErr(3),    // max 3 retries for Temporary errors
-		rehttp.ConstDelay(time.Second), // wait 1s between retries
+		rehttp.RetryAll(rehttp.RetryMaxRetries(3), rehttp.RetryTemporaryErr()), // max 3 retries for Temporary errors
+		rehttp.ConstDelay(time.Second),                                         // wait 1s between retries
 	)
-	if err != nil {
-		// handle err
-	}
 	client := &http.Client{
 		Transport: tr,
 		Timeout:   10 * time.Second, // Client timeout applies to all retries as a whole
@@ -24,6 +21,6 @@ func Example() {
 	if err != nil {
 		// handle err
 	}
-	// handle response...
+	// handle response
 	res.Body.Close()
 }

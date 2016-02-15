@@ -15,14 +15,16 @@
 // It also provides common retry helpers that return a RetryFn:
 //     - RetryIsErr(func(error) bool) RetryFn
 //     - RetryHTTPMethods(methods ...string) RetryFn
-//     - RetryMaxAttempts(max int) RetryFn
+//     - RetryMaxRetries(max int) RetryFn
 //     - RetryStatuses(statuses ...int) RetryFn
-//     - RetryStatusRange(fromStatus, toStatus int) RetryFn
+//     - RetryStatusInterval(fromStatus, toStatus int) RetryFn
 //     - RetryTemporaryErr() RetryFn
 //
 // Those can be combined with RetryAny or RetryAll as needed. RetryAny
 // enables retries if any of the RetryFn return true, while RetryAll
-// enables retries if all RetryFn return true.
+// enables retries if all RetryFn return true. Typically, the RetryFn
+// of the Transport should use at least RetryMaxRetries and some other
+// retry condition(s), combined using RetryAll.
 //
 // By default, the Transport will buffer the request's body in order to
 // be able to retry the request, as a request attempt will consume and
@@ -59,7 +61,7 @@ type temporaryer interface {
 	Temporary() bool
 }
 
-// Attempt holds the data for a RoundTrip attempt.
+// Attempt holds the data describing a RoundTrip attempt.
 type Attempt struct {
 	// Index is the attempt index starting at 0.
 	Index int
@@ -139,11 +141,12 @@ func RetryAll(retryFns ...RetryFn) RetryFn {
 	}
 }
 
-// RetryMaxAttempts returns a RetryFn that retries if the number of
-// attempts is less than or equal to max.
-func RetryMaxAttempts(max int) RetryFn {
+// RetryMaxRetries returns a RetryFn that retries if the number of
+// retries is less than or equal to max.
+func RetryMaxRetries(max int) RetryFn {
 	return func(attempt Attempt) bool {
-		// < instead of <= because attempt.Index is 0-based
+		// < instead of <= because attempt.Index is 0-based, so if max = 1
+		// (1 retry), it will return true when attempt.Index == 0 only.
 		return attempt.Index < max
 	}
 }
@@ -171,14 +174,16 @@ func RetryTemporaryErr() RetryFn {
 	})
 }
 
-// RetryStatusRange returns a RetryFn that retries if the response's status
-// code is in the provided range, inclusively (that is, it retries if
-// fromStatus <= status <= toStatus).
-func RetryStatusRange(fromStatus, toStatus int) RetryFn {
+// RetryStatusInterval returns a RetryFn that retries if the response's
+// status code is in the provided half-closed interval [fromStatus, toStatus)
+// (that is, it retries if fromStatus <= Response.StatusCode < toStatus, so
+// RetryStatusInterval(400, 500) would retry for any 4xx code, but not for
+// 500).
+func RetryStatusInterval(fromStatus, toStatus int) RetryFn {
 	return func(attempt Attempt) bool {
 		return attempt.Response != nil &&
 			attempt.Response.StatusCode >= fromStatus &&
-			attempt.Response.StatusCode <= toStatus
+			attempt.Response.StatusCode < toStatus
 	}
 }
 
@@ -250,8 +255,8 @@ type Transport struct {
 	// PreventRetryWithBody prevents retrying if the request has a body. Since
 	// the body is consumed on a request attempt, in order to retry a request
 	// with a body, the body has to be buffered in memory. Setting this
-	// to true avoids this buffering: the retry logic is bypassed if a body
-	// is present (if the body is non-nil).
+	// to true avoids this buffering: the retry logic is bypassed if the body
+	// is non-nil.
 	PreventRetryWithBody bool
 
 	// retry is a function that determines if the request should be retried.

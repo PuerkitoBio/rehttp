@@ -57,7 +57,7 @@ func TestContextCancelOnRetry(t *testing.T) {
 	defer srv.Close()
 
 	// cancel while waiting on retry response
-	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 600)), ConstDelay(0))
+	tr := NewTransport(nil, RetryAll(RetryMaxRetries(1), RetryStatusInterval(500, 600)), ConstDelay(0))
 	c := &http.Client{
 		Transport: tr,
 	}
@@ -73,7 +73,7 @@ func TestContextCancelOnRetry(t *testing.T) {
 
 	// cancel while waiting on delay
 	atomic.StoreInt32(&callCnt, 0)
-	tr = NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 600)), ConstDelay(2*time.Second))
+	tr = NewTransport(nil, RetryAll(RetryMaxRetries(1), RetryStatusInterval(500, 600)), ConstDelay(2*time.Second))
 	c = &http.Client{
 		Transport: tr,
 	}
@@ -98,7 +98,7 @@ func TestContextCancel(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 600)), ConstDelay(0))
+	tr := NewTransport(nil, RetryAll(RetryMaxRetries(1), RetryStatusInterval(500, 600)), ConstDelay(0))
 	c := &http.Client{
 		Transport: tr,
 	}
@@ -140,7 +140,7 @@ func TestClientTimeoutSlowBody(t *testing.T) {
 	}
 
 	// test with retry transport
-	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(2), RetryTemporaryErr()), ConstDelay(time.Second))
+	tr := NewTransport(nil, RetryAll(RetryMaxRetries(2), RetryTemporaryErr()), ConstDelay(time.Second))
 
 	c := &http.Client{
 		Transport: tr,
@@ -169,7 +169,7 @@ func TestClientTimeoutOnRetry(t *testing.T) {
 	defer srv.Close()
 
 	// timeout while waiting for retry request
-	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 600)), ConstDelay(0))
+	tr := NewTransport(nil, RetryAll(RetryMaxRetries(1), RetryStatusInterval(500, 600)), ConstDelay(0))
 	c := &http.Client{
 		Transport: tr,
 		Timeout:   time.Second,
@@ -182,7 +182,7 @@ func TestClientTimeoutOnRetry(t *testing.T) {
 	atomic.StoreInt32(&callCnt, 0)
 
 	// timeout while waiting for retry delay
-	tr = NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 600)), ConstDelay(2*time.Second))
+	tr = NewTransport(nil, RetryAll(RetryMaxRetries(1), RetryStatusInterval(500, 600)), ConstDelay(2*time.Second))
 	c = &http.Client{
 		Transport: tr,
 		Timeout:   time.Second,
@@ -204,7 +204,7 @@ func TestClientTimeout(t *testing.T) {
 	defer srv.Close()
 
 	// test with retry transport
-	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(2), RetryTemporaryErr()), ConstDelay(time.Second))
+	tr := NewTransport(nil, RetryAll(RetryMaxRetries(2), RetryTemporaryErr()), ConstDelay(time.Second))
 	c := &http.Client{
 		Transport: tr,
 		Timeout:   time.Second,
@@ -238,7 +238,7 @@ func TestTransportTimeout(t *testing.T) {
 	httpTr := &http.Transport{
 		ResponseHeaderTimeout: time.Second,
 	}
-	tr := NewTransport(httpTr, RetryAll(RetryMaxAttempts(1), RetryTemporaryErr()), ConstDelay(time.Second))
+	tr := NewTransport(httpTr, RetryAll(RetryMaxRetries(1), RetryTemporaryErr()), ConstDelay(time.Second))
 	c := &http.Client{Transport: tr}
 	// ResponseHeaderTimeout causes a TemporaryErr, so it will retry once
 	wg.Add(2)
@@ -262,7 +262,7 @@ func TestClientNoRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(2), RetryTemporaryErr()), ConstDelay(time.Second))
+	tr := NewTransport(nil, RetryAll(RetryMaxRetries(2), RetryTemporaryErr()), ConstDelay(time.Second))
 
 	c := &http.Client{
 		Transport: tr,
@@ -291,7 +291,7 @@ func TestClientRetryWithBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 500)), ConstDelay(0))
+	tr := NewTransport(nil, RetryAll(RetryMaxRetries(1), RetryStatuses(500)), ConstDelay(0))
 
 	c := &http.Client{
 		Transport: tr,
@@ -324,7 +324,7 @@ func TestClientRetryWithHeaders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tr := NewTransport(nil, RetryAll(RetryMaxAttempts(1), RetryStatusRange(500, 500)), ConstDelay(0))
+	tr := NewTransport(nil, RetryAll(RetryMaxRetries(1), RetryStatuses(500)), ConstDelay(0))
 
 	c := &http.Client{
 		Transport: tr,

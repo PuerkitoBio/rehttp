@@ -31,7 +31,7 @@ func TestRetryHTTPMethods(t *testing.T) {
 	}
 
 	for i, tc := range cases {
-		fn := RetryAll(RetryMaxAttempts(tc.retries), RetryHTTPMethods(tc.meths...))
+		fn := RetryAll(RetryMaxRetries(tc.retries), RetryHTTPMethods(tc.meths...))
 		req, err := http.NewRequest(tc.inMeth, "", nil)
 		require.Nil(t, err)
 		got := fn(Attempt{Request: req, Index: tc.att})
@@ -39,7 +39,7 @@ func TestRetryHTTPMethods(t *testing.T) {
 	}
 }
 
-func TestRetryStatusRange(t *testing.T) {
+func TestRetryStatusInterval(t *testing.T) {
 	cases := []struct {
 		retries int
 		res     *http.Response
@@ -52,13 +52,14 @@ func TestRetryStatusRange(t *testing.T) {
 		{retries: 1, res: &http.Response{StatusCode: 400}, att: 0, want: false},
 		{retries: 1, res: &http.Response{StatusCode: 500}, att: 0, want: true},
 		{retries: 1, res: &http.Response{StatusCode: 500}, att: 1, want: false},
-		{retries: 2, res: &http.Response{StatusCode: 500}, att: 0, want: true},
-		{retries: 2, res: &http.Response{StatusCode: 500}, att: 1, want: true},
+		{retries: 2, res: &http.Response{StatusCode: 599}, att: 0, want: true},
+		{retries: 2, res: &http.Response{StatusCode: 503}, att: 1, want: true},
 		{retries: 2, res: &http.Response{StatusCode: 500}, att: 2, want: false},
+		{retries: 2, res: &http.Response{StatusCode: 600}, att: 0, want: false},
 	}
 
 	for i, tc := range cases {
-		fn := RetryAll(RetryMaxAttempts(tc.retries), RetryStatusRange(500, 500))
+		fn := RetryAll(RetryMaxRetries(tc.retries), RetryStatusInterval(500, 600))
 		got := fn(Attempt{Response: tc.res, Index: tc.att})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}
@@ -86,7 +87,7 @@ func TestRetryStatuses(t *testing.T) {
 	}
 
 	for i, tc := range cases {
-		fn := RetryAll(RetryMaxAttempts(tc.retries), RetryStatuses(401, 500))
+		fn := RetryAll(RetryMaxRetries(tc.retries), RetryStatuses(401, 500))
 		got := fn(Attempt{Response: tc.res, Index: tc.att})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}
@@ -112,15 +113,15 @@ func TestRetryTemporaryErr(t *testing.T) {
 	}
 
 	for i, tc := range cases {
-		fn := RetryAll(RetryMaxAttempts(tc.retries), RetryTemporaryErr())
+		fn := RetryAll(RetryMaxRetries(tc.retries), RetryTemporaryErr())
 		got := fn(Attempt{Index: tc.att, Error: tc.err})
 		assert.Equal(t, tc.want, got, "%d", i)
 	}
 }
 
 func TestRetryAll(t *testing.T) {
-	max := RetryMaxAttempts(2)
-	status := RetryStatusRange(500, 600)
+	max := RetryMaxRetries(2)
+	status := RetryStatusInterval(500, 600)
 	temp := RetryTemporaryErr()
 	meths := RetryHTTPMethods("GET")
 	fn := RetryAll(max, status, temp, meths)
@@ -158,8 +159,8 @@ func TestRetryAll(t *testing.T) {
 }
 
 func TestRetryAny(t *testing.T) {
-	max := RetryMaxAttempts(2)
-	status := RetryStatusRange(500, 600)
+	max := RetryMaxRetries(2)
+	status := RetryStatusInterval(500, 600)
 	temp := RetryTemporaryErr()
 	meths := RetryHTTPMethods("GET")
 	fn := RetryAny(status, temp, meths)
@@ -198,7 +199,7 @@ func TestRetryAny(t *testing.T) {
 }
 
 func TestToRetryFn(t *testing.T) {
-	fn := toRetryFn(RetryAll(RetryMaxAttempts(2), RetryTemporaryErr()), ConstDelay(time.Second))
+	fn := toRetryFn(RetryAll(RetryMaxRetries(2), RetryTemporaryErr()), ConstDelay(time.Second))
 
 	cases := []struct {
 		err       error
@@ -229,7 +230,7 @@ func TestCombineRetryFn(t *testing.T) {
 	//   - (POST AND status 500)
 	any := RetryAny(RetryHTTPMethods("GET"), RetryStatuses(401, 403))
 	all := RetryAll(RetryHTTPMethods("POST"), RetryStatuses(500))
-	fn := RetryAll(RetryMaxAttempts(2), RetryAny(any, all))
+	fn := RetryAll(RetryMaxRetries(2), RetryAny(any, all))
 
 	cases := []struct {
 		att    int
