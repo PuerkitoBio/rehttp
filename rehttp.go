@@ -34,13 +34,13 @@
 //
 // This package requires Go version 1.6+, since it uses the new
 // http.Request.Cancel field in order to cancel requests. It doesn't
-// implement the deprecated Transport.CancelRequest method
+// implement the deprecated http.Transport.CancelRequest method
 // (https://golang.org/pkg/net/http/#Transport.CancelRequest).
 //
 // It should work on Go1.5, but only if there is no timeout set on the
 // *http.Client. Go's stdlib will return an error on the first request
 // if that's the case, because it requires a `RoundTripper` that
-// implements the (now deprecated in Go1.6) `CancelRequest` method.
+// implements the CancelRequest method.
 //
 package rehttp
 
