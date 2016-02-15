@@ -1,5 +1,5 @@
 // Package rehttp implements an HTTP transport that handles retries.
-// An HTTP Client can be created with a *rehttp.Transport as RoundTripper
+// An HTTP client can be created with a *rehttp.Transport as RoundTripper
 // and it will apply the retry strategy to its requests.
 //
 // The retry strategy is provided by the Transport, which determines
