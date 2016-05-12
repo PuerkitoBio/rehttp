@@ -281,6 +281,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var attempt int
 	preventRetry := req.Body != nil && t.PreventRetryWithBody
 
+	// get the done cancellation channel for the context, will be nil
+	// for < go1.7.
+	done := contextForRequest(req)
+
 	// buffer the body if needed
 	var br *bytes.Reader
 	if req.Body != nil && !preventRetry {
@@ -331,8 +335,11 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		select {
 		case <-time.After(delay):
 			attempt++
+		case <-done:
+			// request canceled by caller (post-1.7), don't retry
+			return nil, errors.New("net/http: request canceled")
 		case <-req.Cancel:
-			// request canceled by caller, don't retry
+			// request canceled by caller (pre-1.7), don't retry
 			return nil, errors.New("net/http: request canceled")
 		}
 	}

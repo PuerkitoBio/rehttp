@@ -2,9 +2,11 @@
 
 Package rehttp implements an HTTP Transport (an `http.RoundTripper`) that handles retries. See the [godoc][] for details.
 
-## Installation
-
 Please note that rehttp requires Go1.6+, because it uses the `http.Request.Cancel` field to check for cancelled requests. It *should* work on Go1.5, but only if there is no timeout set on the `*http.Client`. Go's stdlib will return an error on the first request if that's the case, because it requires a `RoundTripper` that implements the (now deprecated in Go1.6) `CancelRequest` method.
+
+On Go1.7+, it uses the context returned by `http.Request.Context` to check for cancelled requests.
+
+## Installation
 
     $ go get github.com/PuerkitoBio/rehttp
 
