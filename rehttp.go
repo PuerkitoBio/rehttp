@@ -37,6 +37,9 @@
 // implement the deprecated http.Transport.CancelRequest method
 // (https://golang.org/pkg/net/http/#Transport.CancelRequest).
 //
+// On Go1.7+, it uses the context returned by http.Request.Context
+// to check for cancelled requests.
+//
 // It should work on Go1.5, but only if there is no timeout set on the
 // *http.Client. Go's stdlib will return an error on the first request
 // if that's the case, because it requires a RoundTripper that
