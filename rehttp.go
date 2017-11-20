@@ -103,13 +103,14 @@ type RetryFn func(attempt Attempt) bool
 // retry and delay to control the retry logic. It uses the provided
 // RoundTripper to execute the requests. If rt is nil,
 // http.DefaultTransport is used.
-func NewTransport(rt http.RoundTripper, retry RetryFn, delay DelayFn) *Transport {
+func NewTransport(rt http.RoundTripper, retry RetryFn, delay DelayFn, reuse bool) *Transport {
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
 	return &Transport{
 		RoundTripper: rt,
 		retry:        toRetryFn(retry, delay),
+		reuse:        reuse,
 	}
 }
 
@@ -275,6 +276,9 @@ type Transport struct {
 	// If it returns false, no retry is attempted, otherwise a retry is
 	// attempted after the specified duration.
 	retry retryFn
+
+	// sets the re-use of a connection, see https://github.com/golang/go/issues/4677
+	reuse bool
 }
 
 // RoundTrip implements http.RoundTripper for the Transport type.
@@ -282,6 +286,9 @@ type Transport struct {
 // adds retry logic as per its configuration.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var attempt int
+	if !t.reuse {
+		req.Close = true
+	}
 	preventRetry := req.Body != nil && t.PreventRetryWithBody
 
 	// get the done cancellation channel for the context, will be nil
