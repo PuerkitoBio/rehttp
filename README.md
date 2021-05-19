@@ -1,4 +1,4 @@
-# rehttp [![build status](https://secure.travis-ci.org/PuerkitoBio/rehttp.png)](http://travis-ci.org/PuerkitoBio/rehttp) [![GoDoc](https://godoc.org/github.com/PuerkitoBio/rehttp?status.png)][godoc]
+# rehttp [![build status](https://secure.travis-ci.org/PuerkitoBio/rehttp.png)](http://travis-ci.org/PuerkitoBio/rehttp) [![Go Reference](https://pkg.go.dev/badge/rehttp.svg)](https://pkg.go.dev/rehttp)
 
 Package rehttp implements an HTTP Transport (an `http.RoundTripper`) that handles retries. See the [godoc][] for details.
 
