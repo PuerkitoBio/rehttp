@@ -282,7 +282,7 @@ type Transport struct {
 // adds retry logic as per its configuration.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var attempt int
-	preventRetry := req.Body != nil && t.PreventRetryWithBody
+	preventRetry := req.Body != nil && req.Body != http.NoBody && t.PreventRetryWithBody
 
 	// get the done cancellation channel for the context, will be nil
 	// for < go1.7.
@@ -290,7 +290,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// buffer the body if needed
 	var br *bytes.Reader
-	if req.Body != nil && !preventRetry {
+	if req.Body != nil && req.Body != http.NoBody && !preventRetry {
 		var buf bytes.Buffer
 		if _, err := io.Copy(&buf, req.Body); err != nil {
 			// cannot even try the first attempt, body has been consumed
