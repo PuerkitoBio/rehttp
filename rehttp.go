@@ -9,16 +9,17 @@
 //
 // The package offers common delay strategies as ready-made functions that
 // return a DelayFn:
-//     - ConstDelay(delay time.Duration) DelayFn
-//     - ExpJitterDelay(base, max time.Duration) DelayFn
+//   - ConstDelay(delay time.Duration) DelayFn
+//   - ExpJitterDelay(base, max time.Duration) DelayFn
 //
 // It also provides common retry helpers that return a RetryFn:
-//     - RetryIsErr(func(error) bool) RetryFn
-//     - RetryHTTPMethods(methods ...string) RetryFn
-//     - RetryMaxRetries(max int) RetryFn
-//     - RetryStatuses(statuses ...int) RetryFn
-//     - RetryStatusInterval(fromStatus, toStatus int) RetryFn
-//     - RetryTemporaryErr() RetryFn
+//   - RetryIsErr(func(error) bool) RetryFn
+//   - RetryHTTPMethods(methods ...string) RetryFn
+//   - RetryMaxRetries(max int) RetryFn
+//   - RetryStatuses(statuses ...int) RetryFn
+//   - RetryStatusInterval(fromStatus, toStatus int) RetryFn
+//   - RetryTimeoutErr() RetryFn
+//   - RetryTemporaryErr() RetryFn
 //
 // Those can be combined with RetryAny or RetryAll as needed. RetryAny
 // enables retries if any of the RetryFn return true, while RetryAll
@@ -173,6 +174,8 @@ func RetryIsErr(fn func(error) bool) RetryFn {
 // is a temporary error. A temporary error is one that implements
 // the Temporary() bool method. Most errors from the net package implement
 // this.
+// This interface was deprecated in go 1.18. Favor RetryTimeoutErr.
+// https://github.com/golang/go/issues/45729
 func RetryTemporaryErr() RetryFn {
 	return RetryIsErr(func(err error) bool {
 		if terr, ok := err.(temporaryer); ok {
@@ -180,6 +183,16 @@ func RetryTemporaryErr() RetryFn {
 		}
 		return false
 	})
+}
+
+// RetryTimeoutErr returns a RetryFn that retries if the Attempt's error
+// is a timeout error. Before go 1.13, a timeout error is one that implements
+// the Timeout() bool method. Most errors from the net package implement this.
+// After go 1.13, a timeout error is one that implemts the net.Error interface
+// which includes both Timeout() and Temporary() to make it less likely to
+// falsely identify errors that occurred outside of the net package.
+func RetryTimeoutErr() RetryFn {
+	return RetryIsErr(isTimeoutErr)
 }
 
 // RetryStatusInterval returns a RetryFn that retries if the response's
@@ -213,7 +226,7 @@ func RetryStatuses(statuses ...int) RetryFn {
 
 // RetryHTTPMethods returns a RetryFn that retries if the request's
 // HTTP method is one of the provided methods. It is meant to be used
-// in conjunction with another RetryFn such as RetryTemporaryErr combined
+// in conjunction with another RetryFn such as RetryTimeoutErr combined
 // using RetryAll, otherwise this function will retry any successful
 // request made with one of the provided methods.
 func RetryHTTPMethods(methods ...string) RetryFn {
