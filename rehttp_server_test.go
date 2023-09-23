@@ -33,8 +33,10 @@ func assertNetTimeoutErr(t *testing.T, err error) {
 
 func assertURLTimeoutErr(t *testing.T, err error) {
 	if assert.NotNil(t, err) {
+		t.Logf("%T %[1]v", err)
 		uerr, ok := err.(*url.Error)
 		require.True(t, ok)
+		t.Logf("%T %[1]v", uerr.Err)
 		nerr, ok := uerr.Err.(net.Error)
 		require.True(t, ok)
 		assert.True(t, nerr.Timeout())
