@@ -3,6 +3,7 @@ package rehttp
 import (
 	"bytes"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -134,4 +135,28 @@ func TestMockClientRetryWithBody(t *testing.T) {
 	}
 	assert.Equal(t, 2, mock.Calls())
 	assert.Equal(t, []string{"hello", "hello"}, mock.Bodies())
+}
+
+func TestMockClientRetryTimeout(t *testing.T) {
+	retFn := func(att int, req *http.Request) (*http.Response, error) {
+		return nil, &net.OpError{
+			Err: timeoutErr{},
+		}
+	}
+	mock := &mockRoundTripper{t: t, retFn: retFn}
+
+	tr := NewTransport(mock, RetryAll(RetryMaxRetries(1), RetryTimeoutErr()), ConstDelay(0))
+
+	client := &http.Client{
+		Transport: tr,
+	}
+	_, err := client.Get("http://example.com")
+	if assert.NotNil(t, err) {
+		uerr, ok := err.(*url.Error)
+		require.True(t, ok)
+		assert.Equal(t, &net.OpError{
+			Err: timeoutErr{},
+		}, uerr.Err)
+	}
+	assert.Equal(t, 2, mock.Calls())
 }
