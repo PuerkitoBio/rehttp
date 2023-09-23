@@ -188,7 +188,7 @@ func RetryTemporaryErr() RetryFn {
 // RetryTimeoutErr returns a RetryFn that retries if the Attempt's error
 // is a timeout error. Before go 1.13, a timeout error is one that implements
 // the Timeout() bool method. Most errors from the net package implement this.
-// After go 1.13, a timeout error is one that implemts the net.Error interface
+// After go 1.13, a timeout error is one that implements the net.Error interface
 // which includes both Timeout() and Temporary() to make it less likely to
 // falsely identify errors that occurred outside of the net package.
 func RetryTimeoutErr() RetryFn {
