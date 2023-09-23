@@ -38,8 +38,14 @@ func assertURLTimeoutErr(t *testing.T, err error) {
 		require.True(t, ok)
 		t.Logf("%T %[1]v", uerr.Err)
 		nerr, ok := uerr.Err.(net.Error)
-		require.True(t, ok)
-		assert.True(t, nerr.Timeout())
+		if ok {
+			require.True(t, ok)
+			assert.True(t, nerr.Timeout())
+		} else {
+			// sometimes this error is set to an unexported net/http error that is a
+			// simple error string, not implemented net.Error.
+			require.Contains(t, uerr.Err.Error(), "net/http: request canceled")
+		}
 		t.Logf("%#v", nerr)
 	}
 }
