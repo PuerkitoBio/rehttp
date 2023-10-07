@@ -145,7 +145,7 @@ func TestCancelReader(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		// need a decent number of bytes to make the race case more likely to fail
 		// https://github.com/go-kit/kit/issues/773
-		w.Write(make([]byte, 102400))
+		_, _ = w.Write(make([]byte, 102400))
 	}))
 	defer ts.Close()
 

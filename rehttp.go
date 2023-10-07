@@ -46,7 +46,6 @@
 // *http.Client. Go's stdlib will return an error on the first request
 // if that's the case, because it requires a RoundTripper that
 // implements the CancelRequest method.
-//
 package rehttp
 
 import (
@@ -370,7 +369,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		// close the disposed response's body, if any
 		if res != nil {
-			io.Copy(ioutil.Discard, res.Body)
+			_, _ = io.Copy(ioutil.Discard, res.Body)
 			res.Body.Close()
 		}
 		cancel() // we're done with this response and won't be returning it, so it's safe to cancel immediately
