@@ -65,15 +65,15 @@ func TestTransport_RoundTripTimeouts(t *testing.T) {
 	<-ch
 
 	if err != nil {
-		t.Errorf("got unexpected error doing request: %s", err)
+		t.Fatalf("got unexpected error doing request: %s", err)
 	}
-	if res == nil || res.StatusCode != http.StatusTooManyRequests {
+	if res.StatusCode != http.StatusTooManyRequests {
 		t.Errorf("status code does not match expected: got %d, want %d", res.StatusCode, http.StatusTooManyRequests)
 	}
 
 	// now remove the timeout restriction
 	ch = make(chan bool, 4)
-	tr.PerAttemptTimeout = time.Duration(0)
+	tr.PerAttemptTimeout = 0
 	res, err = client.Do(req)
 	// should have attempted 4 times without going over the timeout
 	<-ch
@@ -82,9 +82,9 @@ func TestTransport_RoundTripTimeouts(t *testing.T) {
 	<-ch
 
 	if err != nil {
-		t.Errorf("got unexpected error doing request: %s", err)
+		t.Fatalf("got unexpected error doing request: %s", err)
 	}
-	if res == nil || res.StatusCode != http.StatusTooManyRequests {
+	if res.StatusCode != http.StatusTooManyRequests {
 		t.Errorf("status code does not match expected: got %d, want %d", res.StatusCode, http.StatusTooManyRequests)
 	}
 }
@@ -154,7 +154,7 @@ func TestCancelReader(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodGet, ts.URL, nil)
 	res, err := client.Do(req.WithContext(ctx))
 	if err != nil {
-		t.Fatalf("unexpected error creating request: %s", err)
+		t.Fatalf("unexpected error executing request: %s", err)
 	}
 	defer res.Body.Close()
 	b, err := io.ReadAll(res.Body)
