@@ -295,7 +295,7 @@ func TestClientRetryWithBody(t *testing.T) {
 			return
 		}
 
-		io.Copy(w, r.Body)
+		_, _ = io.Copy(w, r.Body)
 	}))
 	defer srv.Close()
 
