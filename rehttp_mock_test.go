@@ -117,24 +117,61 @@ func TestMockClientPreventRetryWithBody(t *testing.T) {
 }
 
 func TestMockClientRetryWithBody(t *testing.T) {
-	retFn := func(att int, req *http.Request) (*http.Response, error) {
-		return nil, tempErr{}
+	newRequest := func(body io.Reader) *http.Request {
+		req, err := http.NewRequest("POST", "http://example.com", body)
+		assert.NoError(t, err)
+		req.Header.Set("Content-Type", "text/plain")
+		return req
 	}
-	mock := &mockRoundTripper{t: t, retFn: retFn}
 
-	tr := NewTransport(mock, RetryAll(RetryMaxRetries(1), RetryTemporaryErr()), ConstDelay(0))
+	tests := []struct {
+		name        string
+		req         *http.Request
+		retFn       func(att int, req *http.Request) (*http.Response, error)
+		retries     int
+		retriesBody []string
+		err         error
+	}{
+		{
+			name: "temp-error",
+			req:  newRequest(strings.NewReader("hello")),
+			retFn: func(att int, req *http.Request) (*http.Response, error) {
+				return nil, tempErr{}
+			},
+			err:         tempErr{},
+			retries:     4,
+			retriesBody: []string{"hello", "hello", "hello", "hello"},
+		},
+		{
+			name: "307-redirect",
+			req:  newRequest(strings.NewReader("hello")),
+			retFn: func(att int, req *http.Request) (*http.Response, error) {
+				if att >= 1 {
+					return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(""))}, nil
+				}
+				return &http.Response{StatusCode: 307, Body: io.NopCloser(strings.NewReader(""))}, nil
+			},
+			retries:     4,
+			retriesBody: []string{"hello", "hello", "hello", "hello"},
+		},
+	}
 
-	client := &http.Client{
-		Transport: tr,
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockRoundTripper{t: t, retFn: tt.retFn}
+
+			tr := NewTransport(mock, RetryAny(RetryMaxRetries(3), RetryStatusInterval(300, 500)), ConstDelay(0))
+
+			client := &http.Client{
+				Transport: tr,
+			}
+			_, err := client.Do(tt.req)
+			assert.ErrorIs(t, err, tt.err)
+			assert.Equal(t, tt.retries, mock.Calls())
+			assert.Equal(t, tt.retriesBody, mock.Bodies())
+		})
 	}
-	_, err := client.Post("http://example.com", "text/plain", strings.NewReader("hello"))
-	if assert.NotNil(t, err) {
-		uerr, ok := err.(*url.Error)
-		require.True(t, ok)
-		assert.Equal(t, tempErr{}, uerr.Err)
-	}
-	assert.Equal(t, 2, mock.Calls())
-	assert.Equal(t, []string{"hello", "hello"}, mock.Bodies())
 }
 
 func TestMockClientRetryTimeout(t *testing.T) {

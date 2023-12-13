@@ -339,6 +339,9 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	for {
 		var cancel context.CancelFunc = func() {} // empty unless a timeout is set
 		reqWithTimeout := req
+		reqWithTimeout.GetBody = func() (io.ReadCloser, error) {
+			return req.Body, nil
+		}
 		if t.PerAttemptTimeout != 0 {
 			reqWithTimeout, cancel = getPerAttemptTimeoutInfo(ctx, req, t.PerAttemptTimeout)
 		}
