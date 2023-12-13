@@ -125,12 +125,12 @@ func TestMockClientRetryWithBody(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		req         *http.Request
-		retFn       func(att int, req *http.Request) (*http.Response, error)
-		retries     int
-		retriesBody []string
-		err         error
+		name          string
+		req           *http.Request
+		retFn         func(att int, req *http.Request) (*http.Response, error)
+		retries       int
+		requestBodies []string
+		err           error
 	}{
 		{
 			name: "temp-error",
@@ -138,9 +138,9 @@ func TestMockClientRetryWithBody(t *testing.T) {
 			retFn: func(att int, req *http.Request) (*http.Response, error) {
 				return nil, tempErr{}
 			},
-			err:         tempErr{},
-			retries:     4,
-			retriesBody: []string{"hello", "hello", "hello", "hello"},
+			err:           tempErr{},
+			retries:       4,
+			requestBodies: []string{"hello", "hello", "hello", "hello"},
 		},
 		{
 			name: "307-redirect",
@@ -151,8 +151,20 @@ func TestMockClientRetryWithBody(t *testing.T) {
 				}
 				return &http.Response{StatusCode: 307, Body: io.NopCloser(strings.NewReader(""))}, nil
 			},
-			retries:     4,
-			retriesBody: []string{"hello", "hello", "hello", "hello"},
+			retries:       4,
+			requestBodies: []string{"hello", "hello", "hello", "hello"},
+		},
+		{
+			name: "empty-body",
+			req:  newRequest(nil),
+			retFn: func(att int, req *http.Request) (*http.Response, error) {
+				if att >= 1 {
+					return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(""))}, nil
+				}
+				return &http.Response{StatusCode: 307, Body: io.NopCloser(strings.NewReader(""))}, nil
+			},
+			retries:       4,
+			requestBodies: nil,
 		},
 	}
 
@@ -169,7 +181,7 @@ func TestMockClientRetryWithBody(t *testing.T) {
 			_, err := client.Do(tt.req)
 			assert.ErrorIs(t, err, tt.err)
 			assert.Equal(t, tt.retries, mock.Calls())
-			assert.Equal(t, tt.retriesBody, mock.Bodies())
+			assert.Equal(t, tt.requestBodies, mock.Bodies())
 		})
 	}
 }
