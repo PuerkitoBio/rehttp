@@ -11,6 +11,7 @@
 // return a DelayFn:
 //   - ConstDelay(delay time.Duration) DelayFn
 //   - ExpJitterDelay(base, max time.Duration) DelayFn
+//   - ExpJitterDelayWithRand(base, max time.Duration, generator func(int64) int64) DelayFn
 //
 // It also provides common retry helpers that return a RetryFn:
 //   - RetryIsErr(func(error) bool) RetryFn
@@ -270,6 +271,8 @@ func ExpJitterDelay(base, max time.Duration) DelayFn {
 // between 0 and base * 2^attempt capped at max (an exponential
 // backoff delay with jitter). The generator argument is expected
 // to generate a random int64 in the half open interval [0, n).
+// It is the caller's responsibility to ensure that the function is
+// safe for concurrent use.
 //
 // See the full jitter algorithm in:
 // http://www.awsarchitectureblog.com/2015/03/backoff.html
