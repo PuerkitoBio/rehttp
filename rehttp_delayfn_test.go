@@ -27,3 +27,14 @@ func TestExpJitterDelay(t *testing.T) {
 		assert.True(t, delay <= actual, "%d: %s > %s", i, delay, actual)
 	}
 }
+
+func TestExpJitterDelayWithRand(t *testing.T) {
+	fn := ExpJitterDelayWithRand(time.Second, 5*time.Second, func(n int64) int64 { return 999_999_999 % n })
+	for i := 0; i < 10; i++ {
+		delay := fn(Attempt{Index: i})
+		top := math.Pow(2, float64(i)) * float64(time.Second)
+		actual := time.Duration(math.Min(float64(5*time.Second), top))
+		assert.True(t, delay > 0, "%d: %s <= 0", i, delay)
+		assert.True(t, delay <= actual, "%d: %s > %s", i, delay, actual)
+	}
+}
