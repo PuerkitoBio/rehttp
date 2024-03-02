@@ -64,6 +64,11 @@ import (
 // PRNG is the *math.Rand value to use to add jitter to the backoff
 // algorithm used in ExpJitterDelay. By default it uses a *rand.Rand
 // initialized with a source based on the current time in nanoseconds.
+//
+// Deprecated: math/rand sources can panic if used concurrently without
+// synchronization. PRNG is no longer used by this package and its use
+// outside this package is discouraged.
+// https://github.com/PuerkitoBio/rehttp/issues/12
 var PRNG = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // terribly named interface to detect errors that support Temporary.
@@ -253,18 +258,27 @@ func ConstDelay(delay time.Duration) DelayFn {
 	}
 }
 
-// ExpJitterDelay returns a DelayFn that returns a delay between 0 and
-// base * 2^attempt capped at max (an exponential backoff delay with
-// jitter).
+// ExpJitterDelay is identical to [ExpJitterDelayWithRand], using
+// math/rand.Int63n as the random generator function.
+// This package does not call [rand.Seed], so it is the caller's
+// responsibility to ensure the default generator is properly seeded.
+func ExpJitterDelay(base, max time.Duration) DelayFn {
+	return ExpJitterDelayWithRand(base, max, rand.Int63n)
+}
+
+// ExpJitterDelayWithRand returns a DelayFn that returns a delay
+// between 0 and base * 2^attempt capped at max (an exponential
+// backoff delay with jitter). The generator argument is expected
+// to generate a random int64 in the half open interval [0, n).
 //
 // See the full jitter algorithm in:
 // http://www.awsarchitectureblog.com/2015/03/backoff.html
-func ExpJitterDelay(base, max time.Duration) DelayFn {
+func ExpJitterDelayWithRand(base, max time.Duration, generator func(n int64) int64) DelayFn {
 	return func(attempt Attempt) time.Duration {
 		exp := math.Pow(2, float64(attempt.Index))
 		top := float64(base) * exp
 		return time.Duration(
-			PRNG.Int63n(int64(math.Min(float64(max), top))),
+			generator(int64(math.Min(float64(max), top))),
 		)
 	}
 }
